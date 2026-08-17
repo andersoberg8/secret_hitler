@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#16130f">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Secret Hitler — Party Table</title>
+<title>Secret Ayatollah — Party Table</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316130f'/%3E%3Crect x='6' y='7' width='9' height='18' rx='2' fill='%233d7fa6'/%3E%3Crect x='17' y='7' width='9' height='18' rx='2' fill='%23c14a2b'/%3E%3C/svg%3E">
 
 <!-- ==================================================================== -->
@@ -126,7 +126,7 @@ a{color:var(--gold)}
 
 /* ---------- vote buttons ---------- */
 .votes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
-.votes button{padding:44px 8px;border-radius:14px;font-size:30px;font-weight:700;letter-spacing:.1em}
+.votes button{padding:44px 6px;border-radius:14px;font-size:clamp(21px,6.4vw,30px);font-weight:700;letter-spacing:.06em}
 .vja{background:var(--lib);color:#fff;box-shadow:0 4px 0 #2b5f7e}
 .vnein{background:var(--fas);color:#fff;box-shadow:0 4px 0 #8e3319}
 
@@ -241,7 +241,9 @@ setTimeout(function(){
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 /* ===================================================================
-   SECRET HITLER — party table edition
+   SECRET AYATOLLAH — party table edition
+   (a re-theming of Secret Hitler; internal identifiers keep the
+   original names so the rules engine stays easy to compare)
    One static page. Board device = shared screen. Players = phones.
    All game state lives in the database, so any device can be
    reloaded mid-game and will resume exactly where it left off.
@@ -270,15 +272,15 @@ function powerTrack(n){
   return ['investigate', 'investigate', 'special', 'execute', 'execute', 'win'];
 }
 const POWER_NAME = {
-  investigate:'Investigate Loyalty', special:'Special Election',
-  peek:'Policy Peek', execute:'Execution', win:'Fascists Win'
+  investigate:'SAVAK Inquiry', special:'Royal Appointment',
+  peek:'Decree Peek', execute:'Execution', win:'Islamists Win'
 };
 const POWER_ICON = {investigate:'🔍', special:'🗳', peek:'👁', execute:'💀', win:'☠'};
 const POWER_HINT = {
-  investigate:"Look at one player's party card. It reads Liberal or Fascist — Hitler reads as Fascist. You may show it or lie about it.",
-  special:'Choose any other living player to be the next President. After their term the order resumes as normal.',
-  peek:'Look at the top three policies in the draw pile, in order. Do not reorder them.',
-  execute:'Choose a player to remove from the game. If they are Hitler, the Liberals win instantly.'
+  investigate:"Look at one player's loyalty card. It reads Liberal or Islamist — the Ayatollah reads as Islamist. You may show it or lie about it.",
+  special:'Choose any other living player to take the throne next. After their term the succession resumes as normal.',
+  peek:'Look at the top three decrees in the draw pile, in order. Do not reorder them.',
+  execute:'Choose a player to remove from the game. If they are the Ayatollah, the Liberals win instantly.'
 };
 
 /* ---------------- tiny helpers ---------------- */
@@ -324,7 +326,7 @@ async function keepAwake(){
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') keepAwake(); });
 
-const LOGO = `<div class="logo">Secret <b>Hitler</b></div>`;
+const LOGO = `<div class="logo">Secret <b>Ayatollah</b></div>`;
 const joinUrl = () => location.origin + location.pathname + '?g=' + CODE;
 
 /* ---------------- app state ---------------- */
@@ -499,8 +501,8 @@ async function hostHandle(a, tries){
     else if (a.type === 'vetoAsk' && s.phase === 'chancellorEnact'
              && a.from === s.chancellorUid && s.vetoUnlocked && s.veto !== 'refused'){
       await hostWrite({'public/state': {...s, phase:'vetoRequest', seq:s.seq+1,
-        message:`Chancellor ${nameOf(s.chancellorUid)} moves to VETO this agenda. The President must respond.`}});
-      await hostLog(`Chancellor **${nameOf(s.chancellorUid)}** proposed a veto.`);
+        message:`Prime Minister ${nameOf(s.chancellorUid)} moves to VETO this agenda. The Shah must respond.`}});
+      await hostLog(`Prime Minister **${nameOf(s.chancellorUid)}** proposed a veto.`);
     }
     else if (a.type === 'vetoAnswer' && s.phase === 'vetoRequest' && a.from === s.presidentUid){
       await doVetoAnswer(!!a.agree);
@@ -531,7 +533,7 @@ async function drawFrom(need){
 async function hostStart(){
   const players = P();
   const n = players.length;
-  if (!SETUP[n]) { toast('Secret Hitler needs between 5 and 10 players.'); return; }
+  if (!SETUP[n]) { toast('Secret Ayatollah needs between 5 and 10 players.'); return; }
   const cfg = SETUP[n];
 
   const roles = [].concat(Array(cfg.lib).fill('liberal'), Array(cfg.fas).fill('fascist'), ['hitler']);
@@ -547,19 +549,19 @@ async function hostStart(){
     const r = assign[p.uid];
     let allies = [];
     if (r === 'fascist')
-      allies = fascistUids.filter(u=>u!==p.uid).map(nameOf).concat(nameOf(hitlerUid) + '  ·  HITLER');
+      allies = fascistUids.filter(u=>u!==p.uid).map(nameOf).concat(nameOf(hitlerUid) + '  ·  THE AYATOLLAH');
     if (r === 'hitler' && cfg.hitlerKnows)
       allies = fascistUids.map(nameOf);
     patch['secret/'+p.uid] = {
       role: r,
-      party: r === 'liberal' ? 'Liberal' : 'Fascist',
+      party: r === 'liberal' ? 'Liberal' : 'Islamist',
       allies,
       note: r === 'hitler'
         ? (cfg.hitlerKnows
-            ? 'You know your fellow Fascist, and they know you.'
-            : 'You do NOT know who the Fascists are — but they know you. Stay quiet.')
+            ? 'You know your fellow Islamist, and they know you.'
+            : 'You do NOT know who the Islamists are — but they know you. Stay quiet.')
         : r === 'fascist'
-          ? 'You know every Fascist and who Hitler is.'
+          ? 'You know every Islamist and who the Ayatollah is.'
           : 'You know nothing about anyone. Good luck.'
     };
   });
@@ -582,18 +584,18 @@ async function hostStart(){
     investigated:{}, power:null, powerTarget:null,
     lastEnacted:null, winner:null, winReason:null, reveal:null, govHistory:[],
     voteResults:null, votePassed:null,
-    message:'Everyone: open your phone and read your secret role.',
+    message:'Everyone: open your phone and read your secret loyalty card.',
     startedAt: Date.now()
   };
   await hostWrite(patch);
-  await hostLog(`Game begins — **${n}** players, ${cfg.lib} Liberals, ${cfg.fas} Fascists and Hitler.`);
-  await hostLog(`**${nameOf(first)}** is the first Presidential Candidate.`);
+  await hostLog(`Court convenes — **${n}** players: ${cfg.lib} Liberals, ${cfg.fas} Islamist${cfg.fas>1?'s':''} and the Ayatollah.`);
+  await hostLog(`**${nameOf(first)}** takes the throne first.`);
 }
 
 async function hostBeginFirstRound(){
   const s = S();
   await hostWrite({'public/state': {...s, phase:'nominate', seq:s.seq+1,
-    message:`${nameOf(s.presidentUid)} must nominate a Chancellor.`}});
+    message:`The Shah, ${nameOf(s.presidentUid)}, must name a Prime Minister.`}});
 }
 
 /* --- nomination & election --- */
@@ -602,9 +604,9 @@ async function doNominate(target){
   await hostWrite({
     'public/votes': null,
     'public/state': {...s, phase:'vote', nomineeUid:target, seq:s.seq+1, voteResults:null,
-      message:`${nameOf(target)} is nominated for Chancellor. Every living player must vote.`}
+      message:`${nameOf(target)} is named Prime Minister. The Majlis must vote to confirm.`}
   });
-  await hostLog(`**${nameOf(s.presidentUid)}** nominated **${nameOf(target)}** for Chancellor.`);
+  await hostLog(`**${nameOf(s.presidentUid)}** named **${nameOf(target)}** as Prime Minister.`);
 }
 
 function hostCheckVotes(){
@@ -624,8 +626,8 @@ async function tallyVotes(){
     await hostWrite({'public/state': {...s, phase:'voteReveal', seq:s.seq+1,
       voteResults: results, votePassed: passed, jaCount: ja, totalVoters: living.length,
       message: passed
-        ? `ELECTED — ${ja} Ja to ${living.length-ja} Nein.`
-        : `REJECTED — ${ja} Ja to ${living.length-ja} Nein.`}});
+        ? `CONFIRMED — ${ja} Baleh to ${living.length-ja} Nakheir.`
+        : `REJECTED — ${ja} Baleh to ${living.length-ja} Nakheir.`}});
     await hostLog(`Vote on **${nameOf(s.presidentUid)}** / **${nameOf(s.nomineeUid)}**: ${passed?'PASSED':'FAILED'} (${ja}–${living.length-ja}).`);
   } finally { hostBusy = false; }
 }
@@ -637,14 +639,14 @@ async function afterVoteReveal(){
     if (s.phase !== 'voteReveal') return;
     if (s.votePassed){
       if (s.fascist >= 3 && roleOf(s.nomineeUid) === 'hitler'){
-        return endGame('fascist', `${nameOf(s.nomineeUid)} was Hitler, elected Chancellor after three Fascist policies.`, s);
+        return endGame('fascist', `${nameOf(s.nomineeUid)} was the Ayatollah, confirmed as Prime Minister after three Islamist decrees.`, s);
       }
       await beginLegislative({...s, chancellorUid: s.nomineeUid,
         lastPresidentUid: s.presidentUid, lastChancellorUid: s.nomineeUid,
         electionTracker: 0, veto:'none'});
     } else {
       const tracker = s.electionTracker + 1;
-      await hostLog(`Election tracker advances to **${tracker} of 3**.`);
+      await hostLog(`Unrest rises to **${tracker} of 3**.`);
       if (tracker >= 3) return chaos({...s, electionTracker: tracker});
       await advance({...s, electionTracker: tracker, chancellorUid:null, nomineeUid:null});
     }
@@ -654,7 +656,7 @@ async function afterVoteReveal(){
 /* --- legislative session --- */
 async function beginLegislative(s){
   const {h, reshuffled} = await drawFrom(3);
-  if (reshuffled) await hostLog('Draw pile ran low — the discards were shuffled back in.');
+  if (reshuffled) await hostLog('Draw pile ran low — the discarded decrees were shuffled back in.');
   const hand = h.deck.splice(0,3);
   h.hands = {[s.presidentUid]: hand};      // board-readable copy; secret/* is write-only for the board
   await hostWrite({
@@ -663,9 +665,9 @@ async function beginLegislative(s){
     ['secret/'+s.chancellorUid+'/hand']: null,
     'public/state': {...s, phase:'presidentDiscard', seq:s.seq+1,
       deckCount:h.deck.length, discardCount:(h.discard||[]).length,
-      message:`President ${nameOf(s.presidentUid)} draws three policies and discards one. No talking.`}
+      message:`The Shah, ${nameOf(s.presidentUid)}, draws three decrees and discards one. No talking.`}
   });
-  await hostLog(`Legislative session: **${nameOf(s.presidentUid)}** and **${nameOf(s.chancellorUid)}**.`);
+  await hostLog(`Council session: **${nameOf(s.presidentUid)}** and **${nameOf(s.chancellorUid)}**.`);
 }
 
 async function doPresidentDiscard(i){
@@ -681,7 +683,7 @@ async function doPresidentDiscard(i){
     ['secret/'+s.presidentUid+'/hand']: null,
     ['secret/'+s.chancellorUid+'/hand']: kept,
     'public/state': {...s, phase:'chancellorEnact', seq:s.seq+1, discardCount:h.discard.length,
-      message:`Chancellor ${nameOf(s.chancellorUid)} must enact one of two policies.`
+      message:`Prime Minister ${nameOf(s.chancellorUid)} must issue one of two decrees.`
         + (s.vetoUnlocked ? ' Veto power is in play.' : '')}
   });
 }
@@ -700,7 +702,7 @@ async function doVetoAnswer(agree){
   const s = S();
   if (!agree){
     await hostWrite({'public/state': {...s, phase:'chancellorEnact', seq:s.seq+1, veto:'refused',
-      message:`President ${nameOf(s.presidentUid)} REFUSED the veto — the Chancellor must enact a policy.`}});
+      message:`The Shah, ${nameOf(s.presidentUid)}, REFUSED the veto — the Prime Minister must issue a decree.`}});
     await hostLog(`**${nameOf(s.presidentUid)}** refused the veto.`);
     return;
   }
@@ -710,7 +712,7 @@ async function doVetoAnswer(agree){
   h.hands = null;
   const tracker = s.electionTracker + 1;
   await hostWrite({'hidden': h, ['secret/'+s.chancellorUid+'/hand']: null});
-  await hostLog(`**Veto agreed.** Both policies discarded; election tracker → **${tracker} of 3**.`);
+  await hostLog(`**Veto agreed.** Both decrees discarded; unrest rises to **${tracker} of 3**.`);
   const ns = {...s, electionTracker: tracker, discardCount: h.discard.length, veto:'none'};
   if (tracker >= 3) return chaos(ns);
   await advance({...ns, chancellorUid:null, nomineeUid:null});
@@ -733,10 +735,10 @@ async function enactPolicy(policy, s, h, viaChaos){
   if (s.presidentUid)  clear['secret/'+s.presidentUid+'/hand'] = null;
   if (s.chancellorUid) clear['secret/'+s.chancellorUid+'/hand'] = null;
   await hostWrite(clear);
-  await hostLog(`A **${policy==='L'?'Liberal':'Fascist'}** policy is enacted — ${s.liberal} Liberal / ${s.fascist} Fascist.`);
+  await hostLog(`A **${policy==='L'?'Liberal':'Islamist'}** decree is issued — ${s.liberal} Liberal / ${s.fascist} Islamist.`);
 
-  if (s.liberal >= 5) return endGame('liberal', 'Five Liberal policies were enacted.', s);
-  if (s.fascist >= 6) return endGame('fascist', 'Six Fascist policies were enacted.', s);
+  if (s.liberal >= 5) return endGame('liberal', 'Five Liberal decrees were issued.', s);
+  if (s.fascist >= 6) return endGame('fascist', 'Six Islamist decrees were issued.', s);
 
   const pw = policy === 'F' ? powerTrack(s.playerCount)[s.fascist-1] : null;
   if (pw && pw !== 'win' && !viaChaos){
@@ -744,7 +746,7 @@ async function enactPolicy(policy, s, h, viaChaos){
       || alive().some(p => p.uid !== s.presidentUid && !(s.investigated||{})[p.uid]);
     if (usable){
       const ns = {...s, phase:'power', power:pw, powerTarget:null, seq:s.seq+1,
-        message:`Presidential Power — ${POWER_NAME[pw]}. ${nameOf(s.presidentUid)} must act.`};
+        message:`Royal Prerogative — ${POWER_NAME[pw]}. The Shah, ${nameOf(s.presidentUid)}, must act.`};
       const w = {};
       if (pw === 'peek'){
         if (h.deck.length < 3){                    // top three must actually exist
@@ -758,21 +760,21 @@ async function enactPolicy(policy, s, h, viaChaos){
       }
       w['public/state'] = ns;
       await hostWrite(w);
-      await hostLog(`Presidential Power unlocked: **${POWER_NAME[pw]}**.`);
+      await hostLog(`Royal Prerogative unlocked: **${POWER_NAME[pw]}**.`);
       return;
     }
-    await hostLog('No legal target for Investigate Loyalty — the power is skipped.');
+    await hostLog('No legal target for a SAVAK Inquiry — the prerogative is skipped.');
   }
   if (pw && pw !== 'win' && viaChaos)
-    await hostLog('The country is in chaos, so the board power is ignored.');
+    await hostLog('The country is in revolt, so the prerogative is ignored.');
   await advance({...s, chancellorUid:null, nomineeUid:null});
 }
 
 async function chaos(s){
   const {h, reshuffled} = await drawFrom(1);
-  if (reshuffled) await hostLog('Draw pile ran low — the discards were shuffled back in.');
+  if (reshuffled) await hostLog('Draw pile ran low — the discarded decrees were shuffled back in.');
   const top = h.deck.shift();
-  await hostLog('**The country is thrown into chaos.** The top policy is enacted immediately and all term limits reset.');
+  await hostLog('**Revolution breaks out.** The top decree is issued immediately and all term limits reset.');
   await enactPolicy(top, {...s, electionTracker:0,
     lastPresidentUid:null, lastChancellorUid:null,
     chancellorUid:null, nomineeUid:null}, h, true);
@@ -786,18 +788,18 @@ async function doPower(target){
 
   if (s.power === 'investigate'){
     if ((s.investigated||{})[target]) return;
-    const party = roleOf(target) === 'liberal' ? 'Liberal' : 'Fascist';
+    const party = roleOf(target) === 'liberal' ? 'Liberal' : 'Islamist';
     await hostWrite({
       ['secret/'+s.presidentUid+'/investigation']: {name: t.name, party},
       'public/state': {...s, powerTarget: target, seq:s.seq+1,
         investigated: {...(s.investigated||{}), [target]: true},
-        message:`${nameOf(s.presidentUid)} is inspecting ${t.name}'s party membership.`}
+        message:`The Shah is inspecting ${t.name}'s loyalty card.`}
     });
-    await hostLog(`**${nameOf(s.presidentUid)}** investigated **${t.name}**. Only the President saw the card.`);
+    await hostLog(`**${nameOf(s.presidentUid)}** ordered a SAVAK inquiry into **${t.name}**. Only the Shah saw the card.`);
     return;
   }
   if (s.power === 'special'){
-    await hostLog(`**${nameOf(s.presidentUid)}** called a Special Election — **${t.name}** becomes the next President.`);
+    await hostLog(`**${nameOf(s.presidentUid)}** made a Royal Appointment — **${t.name}** takes the throne next.`);
     return advance({...s, power:null, powerTarget:null, chancellorUid:null, nomineeUid:null,
       nextPresidentOverride: target, resumeAfterSpecial: normalNext(s.presidentUid)});
   }
@@ -805,7 +807,7 @@ async function doPower(target){
     await hostWrite({['public/players/'+target+'/alive']: false});
     await hostLog(`**${nameOf(s.presidentUid)}** executed **${t.name}**.`);
     if (roleOf(target) === 'hitler')
-      return endGame('liberal', `${t.name} was Hitler. The Liberals win.`, {...s, power:null});
+      return endGame('liberal', `${t.name} was the Ayatollah. The Liberals win.`, {...s, power:null});
     const ns = {...s, power:null, powerTarget:null, chancellorUid:null, nomineeUid:null};
     if (ns.lastChancellorUid === target) ns.lastChancellorUid = null;
     if (ns.lastPresidentUid === target)  ns.lastPresidentUid = null;
@@ -819,7 +821,7 @@ async function doPowerAck(){
     ['secret/'+s.presidentUid+'/peek']: null,
     ['secret/'+s.presidentUid+'/investigation']: null
   });
-  if (s.power === 'peek') await hostLog(`**${nameOf(s.presidentUid)}** examined the top three policies.`);
+  if (s.power === 'peek') await hostLog(`**${nameOf(s.presidentUid)}** examined the top three decrees.`);
   await advance({...s, power:null, powerTarget:null, chancellorUid:null, nomineeUid:null});
 }
 
@@ -847,7 +849,7 @@ async function advance(s){
   }
   Object.assign(ns, {presidentUid: next, phase:'nominate', seq: s.seq+1,
     nomineeUid:null, chancellorUid:null, voteResults:null, votePassed:null, veto:'none',
-    message:`${nameOf(next)} is Presidential Candidate and must nominate a Chancellor.`});
+    message:`${nameOf(next)} takes the throne and must name a Prime Minister.`});
   await hostWrite({'public/votes': null, 'public/state': ns});
 }
 
@@ -859,7 +861,7 @@ async function endGame(winner, reason, s){
   P().forEach(p => { clear['secret/'+p.uid+'/hand'] = null; clear['secret/'+p.uid+'/peek'] = null; });
   await hostWrite({...clear, 'public/state': {...st, phase:'gameover', seq:st.seq+1,
     winner, winReason: reason, reveal, message: reason}});
-  await hostLog(`**${winner === 'liberal' ? 'The Liberals win.' : 'The Fascists win.'}** ${reason}`);
+  await hostLog(`**${winner === 'liberal' ? 'The Liberals win.' : 'The Islamists win.'}** ${reason}`);
 }
 
 /* the vote reveal auto-advances so nobody has to babysit the board */
@@ -881,7 +883,7 @@ function hostTick(){
    investigated, and the public record of who governed and what came out.
    =================================================================== */
 
-const BOT_NAMES = ['Otto','Greta','Klaus','Elsa','Fritz','Hilde','Werner','Ingrid','Ernst','Marlene'];
+const BOT_NAMES = ['Darius','Farah','Reza','Soraya','Cyrus','Parvin','Bijan','Shirin','Nasser','Mitra'];
 
 let BOTMEM = {};                     // board-local; rebuilt from scratch on reload
 const mem = u => (BOTMEM[u] = BOTMEM[u] || {conf:{}, bump:{}});
@@ -941,7 +943,7 @@ function botVote(u){
   let score = sc[pres] * 0.7 + sc[cand] * 1.0;
   if (m.peek) score -= m.peek.filter(c => c === 'L').length * 0.5;
   if (s.electionTracker === 2) score -= 1.7;                                // chaos is worse for liberals
-  if (s.fascist >= 3 && conf[cand] !== 'L') score += 0.7;                   // Hitler could be anyone
+  if (s.fascist >= 3 && conf[cand] !== 'L') score += 0.7;                   // the Ayatollah could be anyone
   return score < 0.8 + (Math.random() * 0.9 - 0.45);
 }
 
@@ -1022,7 +1024,7 @@ async function botPower(s, u){
     let t;
     if (role === 'fascist'){
       const libs = others.filter(p => roleOf(p.uid) === 'liberal');
-      const safe = others.filter(p => roleOf(p.uid) !== 'hitler');          // never shoot your own Hitler
+      const safe = others.filter(p => roleOf(p.uid) !== 'hitler');          // never shoot your own Ayatollah
       t = libs.length ? libs.slice().sort((a,b) => sc[a.uid] - sc[b.uid])[0]
         : (safe.length ? rpick(safe) : rpick(others));
     } else {
@@ -1039,7 +1041,7 @@ function botObserveEnact(s, policy, viaChaos){
   const pres = s.presidentUid, chan = s.chancellorUid;
   const pm = pres && BOTMEM[pres];
   if (pm && pm.passed && chan){
-    // a chancellor handed two Liberals who produces a Fascist has no excuse
+    // a Prime Minister handed two Liberals who issues an Islamist decree has no excuse
     if (pm.passed.length === 2 && pm.passed.every(c => c === 'L') && policy === 'F')
       mem(pres).conf[chan] = 'F';
     pm.passed = null;
@@ -1119,7 +1121,7 @@ async function botAct(s, u){
     case 'chancellorEnact': {
       const hand = ((await getHidden()).hands || {})[u] || [];
       if (hand.length !== 2) return;
-      // being handed two of the wrong colour says something about the President
+      // being handed two of the wrong colour says something about the Shah
       if (s.presidentUid){
         const b = mem(u).bump;
         if (hand.every(c => c === 'F')) b[s.presidentUid] = (b[s.presidentUid]||0) + 2.0;
@@ -1353,7 +1355,7 @@ function viewLoading(){
 function viewSetup(){
   return `<div class="wrap">${LOGO}<div class="rule"></div>
   <div class="card"><h3 style="color:var(--gold)">One-time setup needed</h3>
-  <p class="tiny muted">This page needs a free Firebase Realtime Database to pass secret roles between phones.
+  <p class="tiny muted">This page needs a free Firebase Realtime Database to pass secret cards between phones.
   Open <b>index.html</b>, find the <b>FIREBASE_CONFIG</b> block at the top, and paste your project's web config there.
   Full step-by-step instructions are in <b>README.md</b> next to this file.</p></div>
   <div class="card"><h3>The short version</h3>
@@ -1386,8 +1388,9 @@ function viewHome(){
     </div>
     ${bc ? `<button class="btn ghost" data-act="resumeBoard" data-arg="${bc}">Resume board for game ${bc}</button>` : ''}
     <button class="btn ghost" data-act="rules">How to play</button>
-    <p class="tiny muted center" style="margin-top:22px">Secret Hitler is a social deduction game by Goat, Wolf &amp; Cabbage,
-    released under Creative Commons BY‑NC‑SA 4.0. This is an unofficial helper for playing it without components.</p>
+    <p class="tiny muted center" style="margin-top:22px">Secret Ayatollah is a re-theming of <b>Secret Hitler</b> by
+    Goat, Wolf &amp; Cabbage, released under Creative Commons BY‑NC‑SA 4.0 and shared here, non-commercially,
+    under that same licence. Unofficial, and not endorsed by them.</p>
   </div>`;
 }
 
@@ -1411,23 +1414,24 @@ function viewRules(){
   return `<div class="sheet"><div class="wrap">
     <div style="display:flex;align-items:center"><h2 class="grow">How to play</h2>
     <button class="btn sm ghost" data-act="rules">Close</button></div>
-    <div class="card"><h3>The idea</h3><p class="tiny muted">Liberals outnumber Fascists but do not know who anyone is.
-    Fascists know each other and are trying to get Hitler elected Chancellor — or simply pass six Fascist policies.
-    Hitler knows the other Fascists only in a five or six player game.</p></div>
+    <div class="card"><h3>The idea</h3><p class="tiny muted">It is Tehran, and the court is rotting from the inside.
+    Liberals outnumber the Islamists but have no idea who anyone is. The Islamists know each other, and they are
+    working to have the Ayatollah confirmed as Prime Minister — or simply to push six Islamist decrees through the
+    council. The Ayatollah knows the other Islamists only in a five or six player game.</p></div>
     <div class="card"><h3>Each round</h3>
-    <div class="kv"><b>Nominate</b><span>The Presidential Candidate picks a Chancellor. The last elected President and Chancellor are not eligible (only the Chancellor, once five or fewer players remain).</span></div>
-    <div class="kv"><b>Vote</b><span>Everyone alive votes Ja or Nein. A strict majority elects the government; a tie fails.</span></div>
-    <div class="kv"><b>Legislate</b><span>The President draws three policies and discards one, then the Chancellor enacts one of the remaining two. No talking during this.</span></div>
-    <div class="kv"><b>Powers</b><span>Certain Fascist policies hand the President a power — investigate, special election, policy peek or execution.</span></div>
+    <div class="kv"><b>Name</b><span>The Shah names a Prime Minister. The last confirmed Shah and Prime Minister are not eligible (only the Prime Minister, once five or fewer players remain).</span></div>
+    <div class="kv"><b>Confirm</b><span>Everyone alive votes Baleh or Nakheir. A strict majority confirms the government; a tie fails.</span></div>
+    <div class="kv"><b>Council</b><span>The Shah draws three decrees and discards one, then the Prime Minister issues one of the remaining two. No talking during this.</span></div>
+    <div class="kv"><b>Prerogative</b><span>Certain Islamist decrees hand the Shah a power — a SAVAK inquiry, a royal appointment, a peek at the decrees, or an execution.</span></div>
     </div>
-    <div class="card"><h3>Chaos</h3><p class="tiny muted">Three failed elections in a row and the top policy is enacted
-    automatically, its board power ignored, and everyone becomes eligible again.</p></div>
+    <div class="card"><h3>Revolution</h3><p class="tiny muted">Three failed confirmations in a row and the streets take over:
+    the top decree is issued automatically, its prerogative ignored, and everyone becomes eligible again.</p></div>
     <div class="card"><h3>Winning</h3>
-    <div class="kv"><b>Liberals</b><span>Five Liberal policies, or Hitler is executed.</span></div>
-    <div class="kv"><b>Fascists</b><span>Six Fascist policies, or Hitler is elected Chancellor once three Fascist policies are on the board.</span></div>
+    <div class="kv"><b>Liberals</b><span>Five Liberal decrees, or the Ayatollah is executed.</span></div>
+    <div class="kv"><b>Islamists</b><span>Six Islamist decrees, or the Ayatollah is confirmed as Prime Minister once three Islamist decrees are on the board.</span></div>
     </div>
-    <div class="card"><h3>Veto</h3><p class="tiny muted">Once five Fascist policies are enacted, the Chancellor may
-    propose a veto. If the President agrees, both policies are discarded and the election tracker advances.</p></div>
+    <div class="card"><h3>Veto</h3><p class="tiny muted">Once five Islamist decrees are issued, the Prime Minister may
+    propose a veto. If the Shah agrees, both decrees are discarded and unrest rises.</p></div>
     <button class="btn" data-act="rules">Close</button>
   </div></div>`;
 }
@@ -1443,7 +1447,7 @@ function trackLiberal(){
     slots += `<div class="slot ${f?'fill l':''} ${(!f && i===n)?'next':''}">
       ${f ? '<div class="ico">🕊</div>Liberal' : (i===4 ? 'Liberals<br>win' : i+1)}</div>`;
   }
-  return `<div class="track"><div class="lab"><span>Liberal policies</span><span>${n} / 5</span></div>
+  return `<div class="track"><div class="lab"><span>Liberal decrees</span><span>${n} / 5</span></div>
     <div class="slots l">${slots}</div></div>`;
 }
 
@@ -1452,14 +1456,14 @@ function trackFascist(){
   let slots = '';
   for (let i=0;i<6;i++){
     const f = i < n, p = pw[i];
-    const label = p === 'win' ? 'Fascists<br>win'
+    const label = p === 'win' ? 'Islamists<br>win'
       : p ? POWER_NAME[p].replace(' ','<br>') : 'No<br>power';
     const icon = p && p !== 'win' ? POWER_ICON[p] : (p === 'win' ? '☠' : '');
     slots += `<div class="slot ${f?'fill f':''} ${(!f&&i===n)?'next':''} ${(!f&&p==='win')?'win':''}">
-      ${f ? '<div class="ico">✖</div>Fascist' : `${icon?`<div class="ico">${icon}</div>`:''}${label}`}
+      ${f ? '<div class="ico">✖</div>Islamist' : `${icon?`<div class="ico">${icon}</div>`:''}${label}`}
       ${(f && i===4) ? '<div style="font-size:9px;opacity:.9">veto on</div>' : ''}</div>`;
   }
-  return `<div class="track"><div class="lab"><span>Fascist policies</span><span>${n} / 6</span></div>
+  return `<div class="track"><div class="lab"><span>Islamist decrees</span><span>${n} / 6</span></div>
     <div class="slots f">${slots}</div></div>`;
 }
 
@@ -1480,14 +1484,14 @@ function boardPlayers(lobby){
       p.uid === s.chancellorUid ? 'chan' : '',
       (p.uid === s.nomineeUid && s.phase !== 'gameover') ? 'nom' : ''].join(' ');
     let badges = '';
-    if (p.uid === s.presidentUid)  badges += '<span class="badge p">Pres</span>';
-    if (p.uid === s.chancellorUid) badges += '<span class="badge c">Chan</span>';
-    else if (p.uid === s.nomineeUid && s.phase === 'vote') badges += '<span class="badge">Nominee</span>';
+    if (p.uid === s.presidentUid)  badges += '<span class="badge p">Shah</span>';
+    if (p.uid === s.chancellorUid) badges += '<span class="badge c">PM</span>';
+    else if (p.uid === s.nomineeUid && s.phase === 'vote') badges += '<span class="badge">Named</span>';
     if (dead) badges += '<span class="badge dead">Dead</span>';
     if (s.phase === 'vote' && !dead)
       badges += (p.uid in (G.votes||{})) ? '<span class="badge">✓ voted</span>' : '<span class="badge" style="opacity:.4">…</span>';
     if (s.phase === 'voteReveal' && s.voteResults && p.uid in s.voteResults)
-      badges += s.voteResults[p.uid] ? '<span class="badge ja">JA</span>' : '<span class="badge nein">NEIN</span>';
+      badges += s.voteResults[p.uid] ? '<span class="badge ja">BALEH</span>' : '<span class="badge nein">NAKHEIR</span>';
     if (p.bot) badges += '<span class="badge bot">CPU</span>';
     else if (p.uid === uid) badges += '<span class="badge">this device</span>';
     else if (p.online === false) badges += '<span class="badge" style="opacity:.5">offline</span>';
@@ -1530,7 +1534,7 @@ function viewBoard(){
             <div class="logo" style="font-size:44px">${n}</div>
             <div class="tiny muted" style="letter-spacing:.2em;text-transform:uppercase">players seated</div>
             <p class="tiny muted" style="margin-top:12px">${cfg
-              ? `${cfg.lib} Liberals · ${cfg.fas} Fascist${cfg.fas>1?'s':''} · Hitler${cfg.hitlerKnows?'<br>Hitler will know the Fascists':'<br>Hitler will be in the dark'}`
+              ? `${cfg.lib} Liberals · ${cfg.fas} Islamist${cfg.fas>1?'s':''} · the Ayatollah${cfg.hitlerKnows?'<br>The Ayatollah will know the Islamists':'<br>The Ayatollah will be in the dark'}`
               : (n < 5 ? `${5-n} more needed — add people or computer players.` : 'Ten players is the maximum.')}</p>
             <button class="btn" data-act="start" ${cfg?'':'disabled'}>Deal roles &amp; start</button>
             <button class="btn ghost" data-act="addBot" ${n>=10?'disabled':''}>Add a computer player</button>
@@ -1539,7 +1543,7 @@ function viewBoard(){
             <h3 style="font-size:14px">Play on this device too</h3>
             <p class="tiny muted">Fine when there is no spare laptop. You get dealt in like everyone else and
             switch between the board and your own cards with the tabs at the top. Note that this device also
-            holds the policy deck, so it is on your honour not to go rummaging in the browser.</p>
+            holds the decree deck, so it is on your honour not to go rummaging in the browser.</p>
             <input class="field" id="nameInput" maxlength="16" placeholder="Your name" value="${esc(pendingName)}">
             <button class="btn ghost" data-act="hostJoin">Deal me in</button>
           </div>`}
@@ -1550,12 +1554,12 @@ function viewBoard(){
 
   if (ph === 'roles'){
     return `<div class="board">${head}
-      <div class="banner"><div class="t">Check your role — on your own phone</div>
-        <div class="s">Hold the card on your own screen to reveal it. Fascists, note your team quietly.
+      <div class="banner"><div class="t">Check your loyalty card — on your own phone</div>
+        <div class="s">Hold the card on your own screen to reveal it. Islamists, note your team quietly.
         Nobody should be looking at anyone else's phone right now.</div></div>
       <div class="bgrid"><div>${boardPlayers()}</div>
       <div><div class="card center">
-        <p class="tiny muted">${esc(nameOf(s.presidentUid))} will be the first Presidential Candidate.</p>
+        <p class="tiny muted">${esc(nameOf(s.presidentUid))} takes the throne first.</p>
         <button class="btn" data-act="begin">Everyone's ready — begin</button>
       </div></div></div></div>`;
   }
@@ -1565,10 +1569,10 @@ function viewBoard(){
     const rev = Object.values(s.reveal || {});
     return `<div class="board">${head}
       <div class="banner ${win?'lib':'fas'}">
-        <div class="t" style="color:${win?'var(--lib-lt)':'var(--fas-lt)'}">${win?'The Liberals win':'The Fascists win'}</div>
+        <div class="t" style="color:${win?'var(--lib-lt)':'var(--fas-lt)'}">${win?'The Liberals win':'The Islamists win'}</div>
         <div class="s">${esc(s.winReason||'')}</div></div>
       <div class="reveal">${rev.map(r => `<div class="rv ${r.role}">
-        <small>${r.role==='hitler'?'was':'was a'}</small>${r.role==='hitler'?'Hitler':r.role}
+        <small>${r.role==='hitler'?'was':'was a'}</small>${r.role==='hitler'?'the Ayatollah':(r.role==='liberal'?'Liberal':'Islamist')}
         <div style="font-family:'Zilla Slab',serif;text-transform:none;font-size:17px;margin-top:6px;letter-spacing:0">${esc(r.name)}</div>
       </div>`).join('')}</div>
       <div class="bgrid" style="margin-top:18px"><div>${boardLog()}</div>
@@ -1583,21 +1587,21 @@ function viewBoard(){
   const sub = {
     nominate: `Everyone else: talk it over. ${esc(nameOf(s.presidentUid))} chooses on their phone.`,
     vote: `${alive().filter(p=>p.uid in (G.votes||{})).length} of ${alive().length} votes are in.`,
-    presidentDiscard: 'No talking during the legislative session.',
-    chancellorEnact: 'No talking during the legislative session.',
-    vetoRequest: 'The President must accept or refuse the veto.',
+    presidentDiscard: 'No talking during the council session.',
+    chancellorEnact: 'No talking during the council session.',
+    vetoRequest: 'The Shah must accept or refuse the veto.',
     power: s.power ? POWER_HINT[s.power] : '',
-    voteReveal: s.votePassed ? 'The government takes office.' : 'Presidency passes to the next player.'
+    voteReveal: s.votePassed ? 'The government takes office.' : 'The throne passes to the next player.'
   }[ph] || '';
 
   const tracker = `<div class="tracker">
-    <span class="tiny muted" style="letter-spacing:.16em;text-transform:uppercase;font-family:Oswald,sans-serif">Election tracker</span>
+    <span class="tiny muted" style="letter-spacing:.16em;text-transform:uppercase;font-family:Oswald,sans-serif">Unrest</span>
     <div class="dots">${[0,1,2].map(i=>`<div class="dot ${i < (s.electionTracker||0)?'on':''}"></div>`).join('')}</div>
-    <span class="tiny muted">${(s.electionTracker||0)===2?'One more failure and the country falls into chaos.':''}</span>
+    <span class="tiny muted">${(s.electionTracker||0)===2?'One more failure and the country falls into revolution.':''}</span>
   </div>`;
 
   const lastCard = s.lastEnacted && (ph==='nominate'||ph==='power')
-    ? `<div class="pcard ${s.lastEnacted}" style="max-width:120px;margin-top:10px">${s.lastEnacted==='L'?'Liberal':'Fascist'}<span class="sub">just enacted</span></div>` : '';
+    ? `<div class="pcard ${s.lastEnacted}" style="max-width:120px;margin-top:10px">${s.lastEnacted==='L'?'Liberal':'Islamist'}<span class="sub">just issued</span></div>` : '';
 
   return `<div class="board">${head}
     <div class="banner ${bannerClass}">
@@ -1633,10 +1637,10 @@ function roleCard(){
   if (!SECRET) return '';
   const r = SECRET.role;
   if (!showRole)
-    return `<div class="hider" data-hold="1">Press and hold<br>to reveal your role</div>`;
+    return `<div class="hider" data-hold="1">Press and hold<br>to reveal your card</div>`;
   return `<div class="role ${r}" data-hold="1">
-    <div class="party">${r==='liberal'?'Liberal party':'Fascist party'}</div>
-    <div class="big">${r==='hitler'?'Hitler':r}</div>
+    <div class="party">${r==='liberal'?'Liberal':'Islamist'} loyalty</div>
+    <div class="big">${r==='hitler'?'Ayatollah':(r==='liberal'?'Liberal':'Islamist')}</div>
     ${SECRET.allies && SECRET.allies.length
       ? `<div style="margin-top:14px;color:rgba(255,255,255,.95);font-size:15px">
           <div style="font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.2em;opacity:.8">Your side</div>
@@ -1654,7 +1658,7 @@ function prow(p, act, arg, confirm, extra){
 
 function policyBtn(c, i, verb, act, confirm){
   return `<button class="pcard ${c}" data-act="${act}" data-arg="${i}" data-confirm="${esc(confirm)}">
-    ${c==='L'?'Liberal':'Fascist'}<span class="sub">${verb}</span></button>`;
+    ${c==='L'?'Liberal':'Islamist'}<span class="sub">${verb}</span></button>`;
 }
 
 function confirmCard(){
@@ -1692,8 +1696,8 @@ function viewPlayer(){
 
   const head = `<div class="sticky"><span class="nm">${esc(me.name)}</span>
     ${me.alive===false?'<span class="badge dead">Dead</span>':''}
-    ${s.presidentUid===uid?'<span class="badge p">President</span>':''}
-    ${s.chancellorUid===uid?'<span class="badge c">Chancellor</span>':''}
+    ${s.presidentUid===uid?'<span class="badge p">Shah</span>':''}
+    ${s.chancellorUid===uid?'<span class="badge c">Prime Minister</span>':''}
     <button class="btn sm ghost" data-act="rules">Rules</button></div>`;
 
   const wrap = inner => `<div class="wrap">${head}${inner}</div>`;
@@ -1701,7 +1705,7 @@ function viewPlayer(){
   /* lobby */
   if ((s.phase||'lobby') === 'lobby'){
     return wrap(`<div class="card center"><h3>You're in</h3>
-      <p class="tiny muted">Waiting for the board to deal the roles. Keep this page open —
+      <p class="tiny muted">Waiting for the board to deal the cards. Keep this page open —
       your phone will buzz when it is your turn.</p>
       <div style="margin-top:10px">${P().map(p=>`<span class="pill ${p.uid===uid?'on':''}">${esc(p.name)}</span> `).join('')}</div>
     </div>`);
@@ -1711,23 +1715,23 @@ function viewPlayer(){
   let body = '';
 
   /* everyone always keeps their role card handy */
-  const roleBlock = `<div class="card"><h3 class="muted" style="font-size:13px">Your secret role</h3>${roleCard()}</div>`;
+  const roleBlock = `<div class="card"><h3 class="muted" style="font-size:13px">Your loyalty card</h3>${roleCard()}</div>`;
 
   const waiting = (title, note) => `<div class="card center"><h3>${title}</h3>
     ${note?`<p class="tiny muted">${note}</p>`:''}</div>`;
 
   switch (s.phase){
     case 'roles':
-      body = `<div class="card center"><h3>Read your role</h3>
-        <p class="tiny muted">Press and hold the card. Shield your screen.</p>${roleCard()}</div>`;
+      body = `<div class="card center"><h3>Read your card</h3>
+        <p class="tiny muted">Press and hold it. Shield your screen.</p>${roleCard()}</div>`;
       return wrap(body);
 
     case 'nominate':
       body = isPresident() && !dead
-        ? `<div class="card"><h3>Nominate a Chancellor</h3>
+        ? `<div class="card"><h3>Name a Prime Minister</h3>
             <p class="tiny muted">Term-limited players are not listed.</p>
-            ${eligibleChancellors().map(p => prow(p,'nominate',p.uid,`Nominate ${p.name} as Chancellor?`)).join('')}</div>`
-        : waiting(`${esc(nameOf(s.presidentUid))} is choosing a Chancellor`, 'Lobby them. Loudly.');
+            ${eligibleChancellors().map(p => prow(p,'nominate',p.uid,`Name ${p.name} as Prime Minister?`)).join('')}</div>`
+        : waiting(`${esc(nameOf(s.presidentUid))} is choosing a Prime Minister`, 'Lobby them. Loudly.');
       break;
 
     case 'vote': {
@@ -1737,66 +1741,66 @@ function viewPlayer(){
         ? waiting('Vote cast', `Waiting for ${alive().length - Object.keys(G.votes||{}).length} more.`)
         : `<div class="card center">
             <h3>${esc(nameOf(s.presidentUid))} &nbsp;/&nbsp; ${esc(nameOf(s.nomineeUid))}</h3>
-            <p class="tiny muted">President and Chancellor. Elect this government?</p>
-            <div class="votes"><button class="vja" data-act="vote" data-arg="ja">Ja!</button>
-            <button class="vnein" data-act="vote" data-arg="nein">Nein!</button></div></div>`;
+            <p class="tiny muted">Shah and Prime Minister. Confirm this government?</p>
+            <div class="votes"><button class="vja" data-act="vote" data-arg="ja">Baleh!</button>
+            <button class="vnein" data-act="vote" data-arg="nein">Nakheir!</button></div></div>`;
       break;
     }
 
     case 'voteReveal': {
       const ok = s.votePassed;
       body = `<div class="card center">
-        <h3 style="color:${ok?'var(--lib-lt)':'var(--fas-lt)'}">${ok?'Government elected':'Government rejected'}</h3>
-        <p class="tiny muted">${s.jaCount} Ja · ${s.totalVoters - s.jaCount} Nein</p>
+        <h3 style="color:${ok?'var(--lib-lt)':'var(--fas-lt)'}">${ok?'Government confirmed':'Government rejected'}</h3>
+        <p class="tiny muted">${s.jaCount} Baleh · ${s.totalVoters - s.jaCount} Nakheir</p>
         <div style="margin-top:10px">${alive().map(p =>
-          `<span class="pill ${s.voteResults && s.voteResults[p.uid] ? 'on':''}">${esc(p.name)} ${s.voteResults && s.voteResults[p.uid]?'Ja':'Nein'}</span> `).join('')}</div>
+          `<span class="pill ${s.voteResults && s.voteResults[p.uid] ? 'on':''}">${esc(p.name)} ${s.voteResults && s.voteResults[p.uid]?'Baleh':'Nakheir'}</span> `).join('')}</div>
       </div>`;
       break;
     }
 
     case 'presidentDiscard':
       if (isPresident() && SECRET && SECRET.hand){
-        body = `<div class="card"><h3>Discard one policy</h3>
-          <p class="tiny muted">The other two go to Chancellor ${esc(nameOf(s.chancellorUid))}. No talking.</p>
+        body = `<div class="card"><h3>Discard one decree</h3>
+          <p class="tiny muted">The other two go to Prime Minister ${esc(nameOf(s.chancellorUid))}. No talking.</p>
           <div class="hand n3">${SECRET.hand.map((c,i)=>
-            policyBtn(c,i,'discard','discard',`Discard the ${c==='L'?'Liberal':'Fascist'} policy?`)).join('')}</div></div>`;
+            policyBtn(c,i,'discard','discard',`Discard the ${c==='L'?'Liberal':'Islamist'} decree?`)).join('')}</div></div>`;
       } else {
-        body = waiting(`President ${esc(nameOf(s.presidentUid))} is discarding`, 'Silence, please.');
+        body = waiting(`The Shah, ${esc(nameOf(s.presidentUid))}, is discarding`, 'Silence, please.');
       }
       break;
 
     case 'chancellorEnact':
       if (isChancellor() && SECRET && SECRET.hand){
-        body = `<div class="card"><h3>Enact one policy</h3>
+        body = `<div class="card"><h3>Issue one decree</h3>
           <p class="tiny muted">The other is discarded. No talking.</p>
           <div class="hand n2">${SECRET.hand.map((c,i)=>
-            policyBtn(c,i,'enact','enact',`Enact the ${c==='L'?'Liberal':'Fascist'} policy?`)).join('')}</div>
+            policyBtn(c,i,'enact','enact',`Issue the ${c==='L'?'Liberal':'Islamist'} decree?`)).join('')}</div>
           ${s.vetoUnlocked && s.veto !== 'refused'
-            ? `<button class="btn ghost" data-act="vetoAsk" data-confirm="Propose a veto on both policies?">Propose a veto instead</button>` : ''}
-          ${s.veto === 'refused' ? `<p class="tiny" style="color:var(--fas-lt);margin-top:10px">Your veto was refused — you must enact one.</p>` : ''}
+            ? `<button class="btn ghost" data-act="vetoAsk" data-confirm="Propose a veto on both decrees?">Propose a veto instead</button>` : ''}
+          ${s.veto === 'refused' ? `<p class="tiny" style="color:var(--fas-lt);margin-top:10px">Your veto was refused — you must issue one.</p>` : ''}
         </div>`;
       } else {
-        body = waiting(`Chancellor ${esc(nameOf(s.chancellorUid))} is legislating`, 'Silence, please.');
+        body = waiting(`Prime Minister ${esc(nameOf(s.chancellorUid))} is deliberating`, 'Silence, please.');
       }
       break;
 
     case 'vetoRequest':
       body = isPresident()
-        ? `<div class="card center"><h3>Chancellor ${esc(nameOf(s.chancellorUid))} proposes a veto</h3>
-            <p class="tiny muted">Agree and both policies are discarded, but the election tracker advances.</p>
-            <button class="btn fas" data-act="vetoYes" data-confirm="Agree to the veto? The election tracker will advance.">Agree to the veto</button>
-            <button class="btn ghost" data-act="vetoNo">Refuse — enact a policy</button></div>`
-        : waiting('A veto has been proposed', `President ${esc(nameOf(s.presidentUid))} must respond.`);
+        ? `<div class="card center"><h3>Prime Minister ${esc(nameOf(s.chancellorUid))} proposes a veto</h3>
+            <p class="tiny muted">Agree and both decrees are discarded, but unrest rises.</p>
+            <button class="btn fas" data-act="vetoYes" data-confirm="Agree to the veto? Unrest will rise.">Agree to the veto</button>
+            <button class="btn ghost" data-act="vetoNo">Refuse — issue a decree</button></div>`
+        : waiting('A veto has been proposed', `The Shah, ${esc(nameOf(s.presidentUid))}, must respond.`);
       break;
 
     case 'power': {
-      if (!isPresident()){ body = waiting(POWER_NAME[s.power] || 'Presidential power',
+      if (!isPresident()){ body = waiting(POWER_NAME[s.power] || 'Royal prerogative',
         `${esc(nameOf(s.presidentUid))} is using it.`); break; }
       if (s.power === 'peek'){
-        body = `<div class="card"><h3>Policy peek</h3>
-          <p class="tiny muted">The top three cards of the draw pile, in order. Nobody else can see this.</p>
+        body = `<div class="card"><h3>Decree peek</h3>
+          <p class="tiny muted">The top three decrees in the draw pile, in order. Nobody else can see this.</p>
           <div class="hand n3">${(SECRET && SECRET.peek ? SECRET.peek : []).map(c =>
-            `<div class="pcard ${c}">${c==='L'?'Liberal':'Fascist'}</div>`).join('')}</div>
+            `<div class="pcard ${c}">${c==='L'?'Liberal':'Islamist'}</div>`).join('')}</div>
           <button class="btn" data-act="ack">Done</button></div>`;
       } else if (s.power === 'investigate'){
         if (SECRET && SECRET.investigation){
@@ -1804,20 +1808,20 @@ function viewPlayer(){
           body = `<div class="card center"><h3>${esc(inv.name)} is…</h3>
             <div class="role ${inv.party==='Liberal'?'liberal':'fascist'}">
               <div class="big">${inv.party}</div>
-              <div class="party">party membership</div></div>
-            <p class="tiny muted" style="margin-top:12px">Remember: Hitler's card also reads Fascist.
+              <div class="party">loyalty card</div></div>
+            <p class="tiny muted" style="margin-top:12px">Remember: the Ayatollah's card also reads Islamist.
             You may tell the table the truth, or not.</p>
             <button class="btn" data-act="ack">Done</button></div>`;
         } else {
-          body = `<div class="card"><h3>Investigate loyalty</h3>
+          body = `<div class="card"><h3>SAVAK inquiry</h3>
             <p class="tiny muted">${POWER_HINT.investigate}</p>
             ${alive().filter(p => p.uid !== uid && !(s.investigated||{})[p.uid])
-              .map(p => prow(p,'power',p.uid,`Investigate ${p.name}?`)).join('')}</div>`;
+              .map(p => prow(p,'power',p.uid,`Open an inquiry into ${p.name}?`)).join('')}</div>`;
         }
       } else if (s.power === 'special'){
-        body = `<div class="card"><h3>Special election</h3>
+        body = `<div class="card"><h3>Royal appointment</h3>
           <p class="tiny muted">${POWER_HINT.special}</p>
-          ${alive().filter(p => p.uid !== uid).map(p => prow(p,'power',p.uid,`Hand the presidency to ${p.name}?`)).join('')}</div>`;
+          ${alive().filter(p => p.uid !== uid).map(p => prow(p,'power',p.uid,`Hand the throne to ${p.name}?`)).join('')}</div>`;
       } else if (s.power === 'execute'){
         body = `<div class="card"><h3>Execution</h3>
           <p class="tiny muted">${POWER_HINT.execute}</p>
@@ -1830,12 +1834,12 @@ function viewPlayer(){
       const win = s.winner === 'liberal';
       const iWon = SECRET && (win ? SECRET.role === 'liberal' : SECRET.role !== 'liberal');
       body = `<div class="card center">
-        <h3 style="color:${win?'var(--lib-lt)':'var(--fas-lt)'};font-size:26px">${win?'Liberals win':'Fascists win'}</h3>
+        <h3 style="color:${win?'var(--lib-lt)':'var(--fas-lt)'};font-size:26px">${win?'Liberals win':'Islamists win'}</h3>
         <p class="tiny muted">${esc(s.winReason||'')}</p>
         <p style="margin-top:8px;font-family:Oswald,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:${iWon?'var(--gold)':'var(--cream-dim)'}">
           ${iWon?'You won':'You lost'}</p>
         <div class="reveal">${Object.values(s.reveal||{}).map(r=>`<div class="rv ${r.role}">
-          <small>${r.role==='hitler'?'was':'was a'}</small>${r.role==='hitler'?'Hitler':r.role}
+          <small>${r.role==='hitler'?'was':'was a'}</small>${r.role==='hitler'?'the Ayatollah':(r.role==='liberal'?'Liberal':'Islamist')}
           <div style="font-family:'Zilla Slab',serif;text-transform:none;font-size:16px;margin-top:5px;letter-spacing:0">${esc(r.name)}</div>
         </div>`).join('')}</div>
       </div>`;
@@ -1847,10 +1851,10 @@ function viewPlayer(){
   }
 
   const status = `<div class="card">
-    <div class="kv"><b>Policies</b><span>${s.liberal||0} Liberal · ${s.fascist||0} Fascist</span></div>
-    <div class="kv"><b>Tracker</b><span>${s.electionTracker||0} of 3 failed elections</span></div>
-    <div class="kv"><b>President</b><span>${esc(nameOf(s.presidentUid))}</span></div>
-    ${s.chancellorUid?`<div class="kv"><b>Chancellor</b><span>${esc(nameOf(s.chancellorUid))}</span></div>`:''}
+    <div class="kv"><b>Decrees</b><span>${s.liberal||0} Liberal · ${s.fascist||0} Islamist</span></div>
+    <div class="kv"><b>Unrest</b><span>${s.electionTracker||0} of 3 failed votes</span></div>
+    <div class="kv"><b>Shah</b><span>${esc(nameOf(s.presidentUid))}</span></div>
+    ${s.chancellorUid?`<div class="kv"><b>Prime Minister</b><span>${esc(nameOf(s.chancellorUid))}</span></div>`:''}
   </div>`;
 
   if (pendingChoice) body = confirmCard();
