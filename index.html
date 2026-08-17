@@ -130,6 +130,16 @@ a{color:var(--gold)}
 .vja{background:var(--lib);color:#fff;box-shadow:0 4px 0 #2b5f7e}
 .vnein{background:var(--fas);color:#fff;box-shadow:0 4px 0 #8e3319}
 
+.tabs{display:flex;gap:8px;padding:10px clamp(10px,2vw,26px) 2px;max-width:1500px;margin:0 auto}
+.tab{flex:1;padding:12px;border-radius:10px;background:var(--panel2);color:var(--cream-dim);
+  border:1px solid var(--line);font-size:14px;position:relative}
+.tab.on{background:var(--gold);color:#241c0c;border-color:var(--gold)}
+.ping{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--fas-lt);
+  margin-left:7px;vertical-align:middle;animation:pulse 1.2s infinite}
+.badge.bot{background:#3a4f63;color:#cfe4f2}
+.xbtn{background:transparent;border:1px solid var(--line);color:var(--cream-dim);
+  border-radius:6px;padding:3px 8px;font-size:10px;letter-spacing:.08em}
+
 /* ---------- BOARD ---------- */
 .board{padding:14px clamp(10px,2vw,26px) 26px;max-width:1500px;margin:0 auto}
 .bhead{display:flex;align-items:center;gap:18px;flex-wrap:wrap;
@@ -331,6 +341,7 @@ let SECRET = null;          // my private data (role, hand, peek, investigation)
 let HIDDEN = null;          // deck / discard / roles — board device only
 let ERRMSG = '';
 let showRole = false, showRules = false, pendingName = '', pendingChoice = null;
+let boardTab = 'board';   // when the board device is also a player
 let lastTurnKey = null, lastQR = '';
 let subs = [];
 
@@ -395,13 +406,16 @@ function attach(code){
 
 function onStateChanged(){
   const s = G.state;
-  if (!IS_BOARD && s){
+  if (s && byUid(uid)){
     const key = s.phase + '|' + s.seq + '|' + (myTurn() ? 'ME' : '-');
     if (myTurn() && lastTurnKey !== null && key !== lastTurnKey) buzz();
     lastTurnKey = key;
+    if (IS_BOARD) boardTab = myTurn() ? 'me' : 'board';
   }
-  if (IS_BOARD) hostTick();
+  if (IS_BOARD){ hostTick(); botTick(); }
 }
+
+const seatedBoard = () => IS_BOARD && !!byUid(uid);
 
 /* ---------------- derived reads ---------------- */
 
@@ -555,7 +569,7 @@ async function hostStart(){
     deckCount:deck.length, discardCount:0,
     nextPresidentOverride:null, resumeAfterSpecial:null,
     investigated:{}, power:null, powerTarget:null,
-    lastEnacted:null, winner:null, winReason:null, reveal:null,
+    lastEnacted:null, winner:null, winReason:null, reveal:null, govHistory:[],
     voteResults:null, votePassed:null,
     message:'Everyone: open your phone and read your secret role.',
     startedAt: Date.now()
@@ -690,6 +704,10 @@ async function doVetoAnswer(agree){
 /* --- enacting a policy --- */
 async function enactPolicy(policy, s, h, viaChaos){
   s.lastEnacted = policy;
+  s.govHistory = (s.govHistory || []).concat([
+    {p: s.presidentUid || null, c: viaChaos ? null : (s.chancellorUid || null), e: policy, chaos: !!viaChaos}
+  ]);
+  botObserveEnact(s, policy, viaChaos);
   if (policy === 'L') s.liberal += 1; else s.fascist += 1;
   s.vetoUnlocked = s.fascist >= 5;
   s.deckCount = h.deck.length;
@@ -840,6 +858,285 @@ function hostTick(){
   }
 }
 /* ===================================================================
+   COMPUTER PLAYERS
+   Bots live on the board device (the only one that can see roles and
+   the deck), but each bot only ever reasons from what its own role is
+   entitled to know: its own card, its team if it has one, anything it
+   investigated, and the public record of who governed and what came out.
+   =================================================================== */
+
+const BOT_NAMES = ['Otto','Greta','Klaus','Elsa','Fritz','Hilde','Werner','Ingrid','Ernst','Marlene'];
+
+let BOTMEM = {};                     // board-local; rebuilt from scratch on reload
+const mem = u => (BOTMEM[u] = BOTMEM[u] || {conf:{}, bump:{}});
+const rpick = a => a[Math.floor(Math.random()*a.length)];
+
+/* what this bot is legitimately allowed to know about other people */
+function botKnows(u){
+  const role = roleOf(u), n = S().playerCount, conf = {};
+  conf[u] = role === 'liberal' ? 'L' : 'F';
+  if (role === 'fascist')
+    P().forEach(p => { if (roleOf(p.uid) !== 'liberal') conf[p.uid] = 'F'; });
+  if (role === 'hitler' && SETUP[n] && SETUP[n].hitlerKnows)
+    P().forEach(p => { if (roleOf(p.uid) === 'fascist') conf[p.uid] = 'F'; });
+  return Object.assign(conf, mem(u).conf);
+}
+
+/* how fascist each player looks from this bot's seat (liberal perspective) */
+function botSusp(u){
+  const s = S(), sc = {};
+  P().forEach(p => sc[p.uid] = 0);
+  (s.govHistory || []).forEach(g => {
+    if (g.chaos) return;
+    if (g.e === 'F'){ if (g.p) sc[g.p] += 1.0; if (g.c) sc[g.c] += 1.6; }
+    else            { if (g.p) sc[g.p] -= 0.8; if (g.c) sc[g.c] -= 1.2; }
+  });
+  Object.entries(mem(u).bump).forEach(([k,v]) => sc[k] = (sc[k]||0) + v);
+  Object.entries(botKnows(u)).forEach(([k,v]) => sc[k] = v === 'F' ? 99 : -99);
+  sc[u] = -99;
+  return sc;
+}
+
+/* does this bot want a Fascist policy on the board right now? */
+function botWantsFascist(u){
+  const r = roleOf(u), s = S();
+  if (r === 'fascist') return true;
+  if (r === 'hitler')  return s.fascist >= 3;      // blend in early, push once it matters
+  return false;
+}
+
+/* ---------------- decisions ---------------- */
+
+function botVote(u){
+  const s = S(), role = roleOf(u), conf = botKnows(u);
+  const pres = s.presidentUid, cand = s.nomineeUid;
+  if (u === cand) return true;
+
+  if (role === 'fascist'){
+    if (roleOf(cand) === 'hitler' && s.fascist >= 3) return true;           // outright win
+    if (conf[cand] === 'F' && conf[pres] === 'F')    return true;
+    if (s.electionTracker === 2)                     return Math.random() < 0.3;  // chaos favours them
+    if (conf[cand] === 'F')                          return Math.random() < 0.8;
+    return Math.random() < 0.45;
+  }
+
+  const sc = botSusp(u), m = mem(u);
+  if (sc[cand] >= 99 || sc[pres] >= 99) return false;
+  let score = sc[pres] * 0.7 + sc[cand] * 1.0;
+  if (m.peek) score -= m.peek.filter(c => c === 'L').length * 0.5;
+  if (s.electionTracker === 2) score -= 1.7;                                // chaos is worse for liberals
+  if (s.fascist >= 3 && conf[cand] !== 'L') score += 0.7;                   // Hitler could be anyone
+  return score < 0.8 + (Math.random() * 0.9 - 0.45);
+}
+
+function botNominate(u){
+  const s = S(), role = roleOf(u), el = eligibleChancellors();
+  if (!el.length) return null;
+  if (role === 'fascist'){
+    const hit = el.find(p => roleOf(p.uid) === 'hitler');
+    if (hit && s.fascist >= 3) return hit.uid;                              // go for the win
+    const mates = el.filter(p => roleOf(p.uid) === 'fascist');
+    if (mates.length && Math.random() < 0.5) return rpick(mates).uid;
+    if (hit && Math.random() < 0.3) return hit.uid;                         // build Hitler's credibility
+  }
+  const sc = botSusp(u);
+  const sorted = el.slice().sort((a,b) => sc[a.uid] - sc[b.uid]);
+  return sorted[Math.random() < 0.78 ? 0 : Math.min(1, sorted.length-1)].uid;
+}
+
+function botDiscard(u, hand){
+  const drop = botWantsFascist(u) ? 'L' : 'F';
+  const i = hand.indexOf(drop);
+  return i >= 0 ? i : 0;
+}
+
+function botEnact(u, hand){
+  const s = S(), want = botWantsFascist(u) ? 'F' : 'L';
+  const i = hand.indexOf(want);
+  if (i >= 0) return {index: i};
+  if (s.vetoUnlocked && s.veto !== 'refused') return {veto: true};          // forced into the wrong policy
+  return {index: 0};
+}
+
+function botVetoAnswer(u){
+  const passed = mem(u).passed || [];
+  const unwanted = botWantsFascist(u) ? 'L' : 'F';
+  if (passed.length === 2)
+    return passed.every(c => c === unwanted) ? true : Math.random() < 0.15;
+  return Math.random() < 0.35;
+}
+
+async function botPower(s, u){
+  const role = roleOf(u), conf = botKnows(u), sc = botSusp(u);
+  const others = alive().filter(p => p.uid !== u);
+
+  if (s.power === 'peek'){
+    const pk = (await get(hRef('secret/' + u + '/peek'))).val();
+    if (pk) mem(u).peek = pk;
+    return botSend({type:'ack', from:u});
+  }
+
+  if (s.power === 'investigate'){
+    const inv = (await get(hRef('secret/' + u + '/investigation'))).val();
+    if (inv){
+      const t = P().find(p => p.name === inv.name);
+      if (t) mem(u).conf[t.uid] = inv.party === 'Liberal' ? 'L' : 'F';
+      return botSend({type:'ack', from:u});
+    }
+    const legal = others.filter(p => !(s.investigated||{})[p.uid]);
+    if (!legal.length) return;
+    const fresh = legal.filter(p => conf[p.uid] === undefined);
+    const pool = fresh.length ? fresh : legal;
+    const t = role === 'fascist' ? rpick(pool)
+            : pool.slice().sort((a,b) => sc[b.uid] - sc[a.uid])[0];
+    return botSend({type:'power', from:u, target:t.uid});
+  }
+
+  if (s.power === 'special'){
+    let t;
+    if (role === 'fascist'){
+      const mates = others.filter(p => roleOf(p.uid) === 'fascist');
+      t = mates.length ? rpick(mates)
+        : (others.find(p => roleOf(p.uid) === 'hitler') || rpick(others));
+    } else {
+      t = others.slice().sort((a,b) => sc[a.uid] - sc[b.uid])[0];
+    }
+    return botSend({type:'power', from:u, target:t.uid});
+  }
+
+  if (s.power === 'execute'){
+    let t;
+    if (role === 'fascist'){
+      const libs = others.filter(p => roleOf(p.uid) === 'liberal');
+      const safe = others.filter(p => roleOf(p.uid) !== 'hitler');          // never shoot your own Hitler
+      t = libs.length ? libs.slice().sort((a,b) => sc[a.uid] - sc[b.uid])[0]
+        : (safe.length ? rpick(safe) : rpick(others));
+    } else {
+      t = others.slice().sort((a,b) => sc[b.uid] - sc[a.uid])[0];
+    }
+    return botSend({type:'power', from:u, target:t.uid});
+  }
+}
+
+/* --- inference the bots draw from their own turns --- */
+
+function botObserveEnact(s, policy, viaChaos){
+  if (viaChaos) return;
+  const pres = s.presidentUid, chan = s.chancellorUid;
+  const pm = pres && BOTMEM[pres];
+  if (pm && pm.passed && chan){
+    // a chancellor handed two Liberals who produces a Fascist has no excuse
+    if (pm.passed.length === 2 && pm.passed.every(c => c === 'L') && policy === 'F')
+      mem(pres).conf[chan] = 'F';
+    pm.passed = null;
+  }
+  Object.keys(BOTMEM).forEach(u => { if (BOTMEM[u].peek) BOTMEM[u].peek = null; });
+}
+
+/* ---------------- scheduling ---------------- */
+
+let botTimer = null, botLock = '', voteLock = '';
+
+function actingUid(s){
+  switch (s.phase){
+    case 'nominate': case 'presidentDiscard': case 'vetoRequest': case 'power':
+      return s.presidentUid;
+    case 'chancellorEnact':
+      return s.chancellorUid;
+    default: return null;
+  }
+}
+
+async function botSend(action){
+  for (let i = 0; i < 40; i++){
+    if (!hostBusy){ await hostHandle(action); return; }
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
+
+function botTick(){
+  if (!IS_BOARD) return;
+  const s = S();
+  if (!s || !HIDDEN || !HIDDEN.roles) return;
+  const key = s.phase + '|' + s.seq;
+
+  if (s.phase === 'vote'){
+    if (voteLock === key) return;
+    voteLock = key;
+    alive().filter(p => p.bot && !(p.uid in (G.votes||{}))).forEach((p, i) => {
+      setTimeout(() => {
+        const now = S();
+        if (!now || now.seq !== s.seq || now.phase !== 'vote') return;
+        if (p.uid in (G.votes||{})) return;
+        set(hRef('public/votes/' + p.uid), botVote(p.uid)).catch(()=>{});
+      }, 900 + i * 500 + Math.random() * 900);
+    });
+    return;
+  }
+
+  if (botLock === key) return;
+  const actor = actingUid(s);
+  const p = actor && byUid(actor);
+  if (!p || !p.bot) return;
+  botLock = key;
+  clearTimeout(botTimer);
+  botTimer = setTimeout(() => {
+    const now = S();
+    if (!now || now.seq !== s.seq || now.phase !== s.phase) return;
+    botAct(now, actor).catch(e => console.error('bot failed', e));
+  }, 1200 + Math.random() * 1500);
+}
+
+async function botAct(s, u){
+  switch (s.phase){
+    case 'nominate': {
+      const t = botNominate(u);
+      if (t) await botSend({type:'nominate', from:u, target:t});
+      return;
+    }
+    case 'presidentDiscard': {
+      const hand = (await get(hRef('secret/' + u + '/hand'))).val() || [];
+      if (hand.length !== 3) return;
+      const i = botDiscard(u, hand);
+      mem(u).passed = hand.filter((_,k) => k !== i);
+      await botSend({type:'discard', from:u, index:i});
+      return;
+    }
+    case 'chancellorEnact': {
+      const hand = (await get(hRef('secret/' + u + '/hand'))).val() || [];
+      if (hand.length !== 2) return;
+      // being handed two of the wrong colour says something about the President
+      if (s.presidentUid){
+        const b = mem(u).bump;
+        if (hand.every(c => c === 'F')) b[s.presidentUid] = (b[s.presidentUid]||0) + 2.0;
+        if (hand.every(c => c === 'L')) b[s.presidentUid] = (b[s.presidentUid]||0) - 1.2;
+      }
+      const d = botEnact(u, hand);
+      await botSend(d.veto ? {type:'vetoAsk', from:u} : {type:'enact', from:u, index:d.index});
+      return;
+    }
+    case 'vetoRequest':
+      await botSend({type:'vetoAnswer', from:u, agree: botVetoAnswer(u)});
+      return;
+    case 'power':
+      await botPower(s, u);
+      return;
+  }
+}
+
+/* ---------------- lobby management ---------------- */
+
+async function addBot(){
+  const taken = P().map(p => (p.name||'').toLowerCase());
+  const name = BOT_NAMES.find(n => !taken.includes(n.toLowerCase())) || ('CPU ' + (P().length+1));
+  let n = 1; while (byUid('bot' + n)) n++;
+  await set(hRef('public/players/bot' + n), {name, seat: Date.now(), alive:true, online:true, bot:true});
+}
+async function removeBot(u){
+  if (!byUid(u) || !byUid(u).bot) return;
+  await remove(hRef('public/players/' + u));
+}
+/* ===================================================================
    VIEWS + ACTIONS
    =================================================================== */
 
@@ -895,7 +1192,8 @@ const castVote = ja => set(ref(db, `games/${CODE}/public/votes/${uid}`), ja);
 
 async function playAgain(){
   const keep = {};
-  P().forEach(p => keep[p.uid] = {name:p.name, seat:p.seat, alive:true, online:p.online !== false});
+  P().forEach(p => keep[p.uid] = {name:p.name, seat:p.seat, alive:true, online:p.online !== false, ...(p.bot?{bot:true}:{})});
+  BOTMEM = {};
   await hostWrite({
     'public/players': keep, 'public/log': null, 'public/votes': null, 'public/inbox': null,
     'hidden': null, 'secret': null,
@@ -935,7 +1233,7 @@ document.addEventListener('click', async e => {
       case 'continue':    await afterVoteReveal(); break;
       case 'again':       await playAgain(); break;
       case 'nominate':    await send({type:'nominate', target:arg}); break;
-      case 'vote':        await castVote(arg === 'ja'); buzz(); break;
+      case 'vote':        await castVote(arg === 'ja'); buzz(); if (seatedBoard()) boardTab='board'; render(); break;
       case 'discard':     await send({type:'discard', index:+arg}); break;
       case 'enact':       await send({type:'enact', index:+arg}); break;
       case 'vetoAsk':     await send({type:'vetoAsk'}); break;
@@ -944,6 +1242,10 @@ document.addEventListener('click', async e => {
       case 'power':       await send({type:'power', target:arg}); break;
       case 'ack':         await send({type:'ack'}); break;
       case 'rules':       showRules = !showRules; render(); break;
+      case 'tab':         boardTab = arg; render(); break;
+      case 'addBot':      await addBot(); break;
+      case 'removeBot':   await removeBot(arg); break;
+      case 'hostJoin':    await claimSeat(v('nameInput')); break;
     }
   }catch(err){ console.error(err); toast('That did not go through — check your connection.'); }
 });
@@ -976,7 +1278,7 @@ function render(){
   else if (!uid && CONFIGURED) html = viewLoading();
   else if (VIEW === 'home')   html = viewHome();
   else if (VIEW === 'join')   html = viewJoin();
-  else if (VIEW === 'board')  html = viewBoard();
+  else if (VIEW === 'board')  html = (seatedBoard() && boardTab === 'me') ? tabBar() + viewPlayer() : viewBoard();
   else if (VIEW === 'player') html = viewPlayer();
   if (showRules) html += viewRules();
   APP.innerHTML = html;
@@ -1022,8 +1324,9 @@ function viewHome(){
     ${ERRMSG?`<div class="err">${esc(ERRMSG)}</div>`:''}
     <div class="card">
       <h3>Run the table</h3>
-      <p class="tiny muted">Use a laptop, tablet or TV that everybody can see. This device becomes the shared
-      gameboard and deals the cards — <b>it does not play</b>. If you want to play too, join from your own phone.</p>
+      <p class="tiny muted">This device becomes the shared gameboard and deals the cards. A laptop or tablet
+      everyone can see is ideal — but a phone works too, and you can deal yourself in from the same screen.
+      Short on people? Add computer players to make up the numbers.</p>
       <button class="btn" data-act="create">Create a game</button>
     </div>
     <div class="card">
@@ -1110,7 +1413,15 @@ function trackFascist(){
     <div class="slots f">${slots}</div></div>`;
 }
 
-function boardPlayers(){
+function tabBar(){
+  if (!seatedBoard()) return '';
+  return `<div class="tabs">
+    <button class="tab ${boardTab==='board'?'on':''}" data-act="tab" data-arg="board">Gameboard</button>
+    <button class="tab ${boardTab==='me'?'on':''}" data-act="tab" data-arg="me">My cards${myTurn()?'<i class="ping"></i>':''}</button>
+  </div>`;
+}
+
+function boardPlayers(lobby){
   const s = S();
   return `<div class="plist">${P().map((p,i) => {
     const dead = p.alive === false;
@@ -1127,7 +1438,10 @@ function boardPlayers(){
       badges += (p.uid in (G.votes||{})) ? '<span class="badge">✓ voted</span>' : '<span class="badge" style="opacity:.4">…</span>';
     if (s.phase === 'voteReveal' && s.voteResults && p.uid in s.voteResults)
       badges += s.voteResults[p.uid] ? '<span class="badge ja">JA</span>' : '<span class="badge nein">NEIN</span>';
-    if (p.online === false) badges += '<span class="badge" style="opacity:.5">offline</span>';
+    if (p.bot) badges += '<span class="badge bot">CPU</span>';
+    else if (p.uid === uid) badges += '<span class="badge">this device</span>';
+    else if (p.online === false) badges += '<span class="badge" style="opacity:.5">offline</span>';
+    if (lobby && p.bot) badges += `<button class="xbtn" data-act="removeBot" data-arg="${p.uid}">remove</button>`;
     return `<div class="pb ${cls}"><span class="seat">${i+1}</span>
       <span class="nm">${esc(p.name)}</span>${badges}</div>`;
   }).join('')}</div>`;
@@ -1141,7 +1455,7 @@ function boardLog(){
 
 function viewBoard(){
   const s = S(), ph = s.phase || 'lobby';
-  const head = `<div class="bhead">${LOGO}
+  const head = `${tabBar()}<div class="bhead">${LOGO}
     <div class="joinbox">
       <div style="text-align:right">
         <div class="tiny muted" style="letter-spacing:.2em;text-transform:uppercase">Join at ${esc(location.host)}</div>
@@ -1156,21 +1470,30 @@ function viewBoard(){
     return `<div class="board">${head}
       <div class="banner"><div class="t">Waiting for players</div>
         <div class="s">Everyone: scan the code or open <b>${esc(location.host + location.pathname)}</b> and enter
-        <b>${esc(CODE||'')}</b>. This screen stays on the table — it does not play.</div></div>
+        <b>${esc(CODE||'')}</b>.</div></div>
       <div class="bgrid">
-        <div>${boardPlayers() || ''}
+        <div>${boardPlayers(true)}
           ${n===0?'<p class="muted">Nobody has joined yet.</p>':''}
         </div>
         <div>
           <div class="card center">
             <div class="logo" style="font-size:44px">${n}</div>
-            <div class="tiny muted" style="letter-spacing:.2em;text-transform:uppercase">players joined</div>
+            <div class="tiny muted" style="letter-spacing:.2em;text-transform:uppercase">players seated</div>
             <p class="tiny muted" style="margin-top:12px">${cfg
               ? `${cfg.lib} Liberals · ${cfg.fas} Fascist${cfg.fas>1?'s':''} · Hitler${cfg.hitlerKnows?'<br>Hitler will know the Fascists':'<br>Hitler will be in the dark'}`
-              : 'Secret Hitler needs 5 to 10 players.'}</p>
+              : (n < 5 ? `${5-n} more needed — add people or computer players.` : 'Ten players is the maximum.')}</p>
             <button class="btn" data-act="start" ${cfg?'':'disabled'}>Deal roles &amp; start</button>
-            <button class="btn ghost" data-act="rules">How to play</button>
+            <button class="btn ghost" data-act="addBot" ${n>=10?'disabled':''}>Add a computer player</button>
           </div>
+          ${seatedBoard() ? '' : `<div class="card">
+            <h3 style="font-size:14px">Play on this device too</h3>
+            <p class="tiny muted">Fine when there is no spare laptop. You get dealt in like everyone else and
+            switch between the board and your own cards with the tabs at the top. Note that this device also
+            holds the policy deck, so it is on your honour not to go rummaging in the browser.</p>
+            <input class="field" id="nameInput" maxlength="16" placeholder="Your name" value="${esc(pendingName)}">
+            <button class="btn ghost" data-act="hostJoin">Deal me in</button>
+          </div>`}
+          <button class="btn ghost" data-act="rules">How to play</button>
         </div>
       </div></div>`;
   }
@@ -1178,8 +1501,8 @@ function viewBoard(){
   if (ph === 'roles'){
     return `<div class="board">${head}
       <div class="banner"><div class="t">Check your role — on your own phone</div>
-        <div class="s">Hold the card on your phone to reveal it. Fascists, note your team quietly.
-        Nobody should be looking at this screen right now.</div></div>
+        <div class="s">Hold the card on your own screen to reveal it. Fascists, note your team quietly.
+        Nobody should be looking at anyone else's phone right now.</div></div>
       <div class="bgrid"><div>${boardPlayers()}</div>
       <div><div class="card center">
         <p class="tiny muted">${esc(nameOf(s.presidentUid))} will be the first Presidential Candidate.</p>
