@@ -656,6 +656,7 @@ async function beginLegislative(s){
   const {h, reshuffled} = await drawFrom(3);
   if (reshuffled) await hostLog('Draw pile ran low — the discards were shuffled back in.');
   const hand = h.deck.splice(0,3);
+  h.hands = {[s.presidentUid]: hand};      // board-readable copy; secret/* is write-only for the board
   await hostWrite({
     'hidden': h,
     ['secret/'+s.presidentUid+'/hand']: hand,
@@ -669,11 +670,12 @@ async function beginLegislative(s){
 
 async function doPresidentDiscard(i){
   const s = S();
-  const hand = (await get(hRef('secret/'+s.presidentUid+'/hand'))).val() || [];
-  if (!hand.length || i<0 || i>=hand.length) return;
   const h = await getHidden();
+  const hand = (h.hands || {})[s.presidentUid] || [];
+  if (hand.length !== 3 || i<0 || i>=hand.length) return;
   const kept = hand.filter((_,k)=>k!==i);
   h.discard = (h.discard||[]).concat(hand[i]);
+  h.hands = {[s.chancellorUid]: kept};
   await hostWrite({
     'hidden': h,
     ['secret/'+s.presidentUid+'/hand']: null,
@@ -686,10 +688,11 @@ async function doPresidentDiscard(i){
 
 async function doChancellorEnact(i){
   const s = S();
-  const hand = (await get(hRef('secret/'+s.chancellorUid+'/hand'))).val() || [];
-  if (!hand.length || i<0 || i>=hand.length) return;
   const h = await getHidden();
+  const hand = (h.hands || {})[s.chancellorUid] || [];
+  if (hand.length !== 2 || i<0 || i>=hand.length) return;
   h.discard = (h.discard||[]).concat(hand.filter((_,k)=>k!==i));
+  h.hands = null;
   await enactPolicy(hand[i], {...s}, h, false);
 }
 
@@ -701,9 +704,10 @@ async function doVetoAnswer(agree){
     await hostLog(`**${nameOf(s.presidentUid)}** refused the veto.`);
     return;
   }
-  const hand = (await get(hRef('secret/'+s.chancellorUid+'/hand'))).val() || [];
   const h = await getHidden();
+  const hand = (h.hands || {})[s.chancellorUid] || [];
   h.discard = (h.discard||[]).concat(hand);
+  h.hands = null;
   const tracker = s.electionTracker + 1;
   await hostWrite({'hidden': h, ['secret/'+s.chancellorUid+'/hand']: null});
   await hostLog(`**Veto agreed.** Both policies discarded; election tracker → **${tracker} of 3**.`);
@@ -714,6 +718,7 @@ async function doVetoAnswer(agree){
 
 /* --- enacting a policy --- */
 async function enactPolicy(policy, s, h, viaChaos){
+  h.hands = null;
   s.lastEnacted = policy;
   s.govHistory = (s.govHistory || []).concat([
     {p: s.presidentUid || null, c: viaChaos ? null : (s.chancellorUid || null), e: policy, chaos: !!viaChaos}
@@ -982,16 +987,14 @@ async function botPower(s, u){
   const others = alive().filter(p => p.uid !== u);
 
   if (s.power === 'peek'){
-    const pk = (await get(hRef('secret/' + u + '/peek'))).val();
-    if (pk) mem(u).peek = pk;
+    const pk = ((await getHidden()).deck || []).slice(0, 3);
+    if (pk.length) mem(u).peek = pk;
     return botSend({type:'ack', from:u});
   }
 
   if (s.power === 'investigate'){
-    const inv = (await get(hRef('secret/' + u + '/investigation'))).val();
-    if (inv){
-      const t = P().find(p => p.name === inv.name);
-      if (t) mem(u).conf[t.uid] = inv.party === 'Liberal' ? 'L' : 'F';
+    if (s.powerTarget){                       // already looked — remember it and move on
+      mem(u).conf[s.powerTarget] = roleOf(s.powerTarget) === 'liberal' ? 'L' : 'F';
       return botSend({type:'ack', from:u});
     }
     const legal = others.filter(p => !(s.investigated||{})[p.uid]);
@@ -1106,7 +1109,7 @@ async function botAct(s, u){
       return;
     }
     case 'presidentDiscard': {
-      const hand = (await get(hRef('secret/' + u + '/hand'))).val() || [];
+      const hand = ((await getHidden()).hands || {})[u] || [];
       if (hand.length !== 3) return;
       const i = botDiscard(u, hand);
       mem(u).passed = hand.filter((_,k) => k !== i);
@@ -1114,7 +1117,7 @@ async function botAct(s, u){
       return;
     }
     case 'chancellorEnact': {
-      const hand = (await get(hRef('secret/' + u + '/hand'))).val() || [];
+      const hand = ((await getHidden()).hands || {})[u] || [];
       if (hand.length !== 2) return;
       // being handed two of the wrong colour says something about the President
       if (s.presidentUid){
