@@ -342,7 +342,9 @@ let HIDDEN = null;          // deck / discard / roles — board device only
 let ERRMSG = '';
 let showRole = false, showRules = false, pendingName = '', pendingChoice = null;
 let boardTab = 'board';   // when the board device is also a player
-let lastTurnKey = null, lastQR = '';
+let lastTurnKey = null, lastQR = '', lastHtml = '';
+let pointerHeld = false, renderQueued = false, holdTimer = null;   // see render()
+let pendingSend = null, sendTimer = null;                          // action in flight to the board
 let subs = [];
 
 const LS = {
@@ -406,6 +408,9 @@ function attach(code){
 
 function onStateChanged(){
   const s = G.state;
+  if (pendingSend !== null && s && s.seq !== pendingSend){
+    pendingSend = null; clearTimeout(sendTimer);
+  }
   if (s && byUid(uid)){
     const key = s.phase + '|' + s.seq + '|' + (myTurn() ? 'ME' : '-');
     if (myTurn() && lastTurnKey !== null && key !== lastTurnKey) buzz();
@@ -468,8 +473,14 @@ const getHidden = async () => (await get(hRef('hidden'))).val() || {deck:[], dis
 setInterval(() => { if (CODE && IS_BOARD) set(hRef('public/meta/hostSeen'), serverTimestamp()); }, 5000);
 
 /* --- inbox: player actions arrive here; the board validates and applies --- */
-async function hostHandle(a){
-  if (hostBusy) return;
+let retryTimer = null;
+async function hostHandle(a, tries){
+  if (hostBusy){                       // busy right now — come back, do not drop it
+    if ((tries || 0) > 30) return;
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => hostHandle(a, (tries || 0) + 1), 200);
+    return;
+  }
   hostBusy = true;
   try{
     await remove(hRef('public/inbox'));
@@ -1187,7 +1198,20 @@ async function claimSeat(name){
   render();
 }
 
-const send = obj => set(ref(db, `games/${CODE}/public/inbox`), {...obj, from: uid, t: Date.now()});
+async function send(obj){
+  const seq = S().seq;
+  await set(ref(db, `games/${CODE}/public/inbox`), {...obj, from: uid, t: Date.now()});
+  pendingSend = seq;
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(() => {
+    if (pendingSend !== null){
+      pendingSend = null;
+      toast('That did not reach the board — try again.', 4000);
+      render(true);
+    }
+  }, 7000);
+  render(true);
+}
 const castVote = ja => set(ref(db, `games/${CODE}/public/votes/${uid}`), ja);
 
 async function playAgain(){
@@ -1224,6 +1248,7 @@ document.addEventListener('click', async e => {
       case 'gotoJoin':    VIEW='join'; ERRMSG=''; render(); break;
       case 'home':        detach(); CODE=null; G={meta:null,players:{},state:null,votes:{},log:[]};
                           SECRET=null; HIDDEN=null; IS_BOARD=false; VIEW='home'; ERRMSG='';
+                          pendingSend=null; pendingChoice=null; lastHtml='';
                           history.replaceState(null,'',location.pathname); render(); break;
       case 'join':        await tryJoin(v('codeInput'), v('nameInput')); break;
       case 'claim':       await claimSeat(v('nameInput')); break;
@@ -1252,7 +1277,7 @@ document.addEventListener('click', async e => {
 
 /* hold-to-reveal role card */
 document.addEventListener('pointerdown', e => {
-  if (e.target.closest('[data-hold]')){ showRole = true; render(); }
+  if (e.target.closest('[data-hold]')){ showRole = true; render(true); }
 });
 ['pointerup','pointercancel','pointerleave'].forEach(ev =>
   document.addEventListener(ev, () => { if (showRole){ showRole = false; render(); } }));
@@ -1267,8 +1292,28 @@ document.addEventListener('input', e => { if (e.target.id === 'nameInput') pendi
 
 /* ---------------- render ---------------- */
 
-function render(){
+/* Every database change used to call render(), which replaced #app wholesale.
+   A tap is only delivered as a `click` if the element survives from pointerdown
+   to pointerup — so any update landing in that window (a vote, a log line, the
+   board's 5-second heartbeat) silently swallowed the tap. Two defences:
+   hold renders while a pointer is down, and never touch the DOM if the markup
+   has not actually changed. */
+function releasePointer(){
+  clearTimeout(holdTimer);
+  pointerHeld = false;
+  if (renderQueued){ renderQueued = false; render(); }
+}
+document.addEventListener('pointerdown', () => {
+  pointerHeld = true;
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(releasePointer, 1500);        // safety net if pointerup never arrives
+}, true);
+['pointerup','pointercancel'].forEach(ev =>
+  document.addEventListener(ev, () => setTimeout(releasePointer, 0), true));
+
+function render(force){
   window.__booted = true;
+  if (pointerHeld && !force){ renderQueued = true; return; }
   const a = document.activeElement;
   const focusId = a && a.id ? a.id : null;
   const caret = (a && a.selectionStart != null) ? a.selectionStart : null;
@@ -1281,6 +1326,8 @@ function render(){
   else if (VIEW === 'board')  html = (seatedBoard() && boardTab === 'me') ? tabBar() + viewPlayer() : viewBoard();
   else if (VIEW === 'player') html = viewPlayer();
   if (showRules) html += viewRules();
+  if (html === lastHtml) return;               // nothing visibly changed — leave the DOM alone
+  lastHtml = html;
   APP.innerHTML = html;
 
   if (focusId){
@@ -1804,6 +1851,8 @@ function viewPlayer(){
   </div>`;
 
   if (pendingChoice) body = confirmCard();
+  else if (pendingSend !== null) body = `<div class="card center"><h3>Sent</h3>
+    <p class="tiny muted">Waiting for the board to catch up…</p></div>`;
   return wrap(body + roleBlock + status);
 }
 
