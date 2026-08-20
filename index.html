@@ -141,7 +141,7 @@ a{color:var(--gold)}
   border-radius:6px;padding:3px 8px;font-size:10px;letter-spacing:.08em}
 
 /* ---------- BOARD ---------- */
-.board{padding:14px clamp(10px,2vw,26px) 26px;max-width:1500px;margin:0 auto}
+.board{padding:14px clamp(10px,2vw,26px) 34px;max-width:1500px;margin:0 auto}
 .bhead{display:flex;align-items:center;gap:18px;flex-wrap:wrap;
   border-bottom:3px solid var(--line);padding-bottom:12px;margin-bottom:16px}
 .bhead .logo{font-size:clamp(20px,2.6vw,34px)}
@@ -150,7 +150,10 @@ a{color:var(--gold)}
 #qr{background:#fff;padding:6px;border-radius:8px;line-height:0}
 #qr img,#qr canvas{display:block;width:74px;height:74px}
 .bgrid{display:grid;grid-template-columns:1.55fr .95fr;gap:clamp(12px,1.6vw,24px);align-items:start}
-@media(max-width:900px){.bgrid{grid-template-columns:1fr}}
+@media(max-width:900px){
+  .bgrid{grid-template-columns:1fr}
+  .bgrid > div:last-child{order:-1}   /* who is who matters most on a small screen */
+}
 .banner{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--gold);
   border-radius:12px;padding:16px 20px;margin-bottom:16px}
 .banner .t{font-family:'Oswald',sans-serif;font-size:clamp(19px,2.4vw,30px);
@@ -168,12 +171,12 @@ a{color:var(--gold)}
 .slots.f{grid-template-columns:repeat(6,1fr)}
 .slot{aspect-ratio:5/7;border-radius:9px;border:2px dashed var(--line);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:4px;font-family:'Oswald',sans-serif;font-size:clamp(8px,.78vw,11px);
+  text-align:center;padding:4px;font-family:'Oswald',sans-serif;font-size:clamp(8px,2vw,11px);
   letter-spacing:.06em;text-transform:uppercase;color:var(--cream-dim);line-height:1.2}
 .slot.fill{border-style:solid;border-color:rgba(0,0,0,.4);color:#fff}
 .slot.fill.l{background:linear-gradient(160deg,var(--lib-lt),var(--lib))}
 .slot.fill.f{background:linear-gradient(160deg,var(--fas-lt),var(--fas))}
-.slot .ico{font-size:clamp(15px,1.7vw,24px);line-height:1;margin-bottom:3px}
+.slot .ico{font-size:clamp(15px,4vw,24px);line-height:1;margin-bottom:3px}
 .slot.win{border-color:var(--fas);color:var(--fas-lt)}
 .slot.next{border-color:var(--gold);color:var(--gold);animation:pulse 1.7s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
@@ -417,12 +420,20 @@ function onStateChanged(){
     const key = s.phase + '|' + s.seq + '|' + (myTurn() ? 'ME' : '-');
     if (myTurn() && lastTurnKey !== null && key !== lastTurnKey) buzz();
     lastTurnKey = key;
-    if (IS_BOARD) boardTab = myTurn() ? 'me' : 'board';
+    // everybody reads their own card during the deal; after that the board
+    // is the default view and your own cards come up when you are needed
+    if (seated() && canBoard())
+      boardTab = (myTurn() || s.phase === 'roles') ? 'me' : 'board';
   }
   if (IS_BOARD){ hostTick(); botTick(); }
 }
 
 const seatedBoard = () => IS_BOARD && !!byUid(uid);
+const seated      = () => !!byUid(uid);
+/* every seated player gets the gameboard once the cards are dealt; the board
+   device always has it. Everything the board renders lives in `public`, which
+   all players can read, so this needs no new permissions. */
+const canBoard    = () => IS_BOARD || (seated() && (S().phase || 'lobby') !== 'lobby');
 
 /* ---------------- derived reads ---------------- */
 
@@ -1263,7 +1274,7 @@ document.addEventListener('click', async e => {
       case 'continue':    await afterVoteReveal(); break;
       case 'again':       await playAgain(); break;
       case 'nominate':    await send({type:'nominate', target:arg}); break;
-      case 'vote':        await castVote(arg === 'ja'); buzz(); if (seatedBoard()) boardTab='board'; render(); break;
+      case 'vote':        await castVote(arg === 'ja'); buzz(); if (seated() && canBoard()) boardTab='board'; render(); break;
       case 'discard':     await send({type:'discard', index:+arg}); break;
       case 'enact':       await send({type:'enact', index:+arg}); break;
       case 'vetoAsk':     await send({type:'vetoAsk'}); break;
@@ -1328,8 +1339,11 @@ function render(force){
   else if (!uid && CONFIGURED) html = viewLoading();
   else if (VIEW === 'home')   html = viewHome();
   else if (VIEW === 'join')   html = viewJoin();
-  else if (VIEW === 'board')  html = (seatedBoard() && boardTab === 'me') ? tabBar() + viewPlayer() : viewBoard();
-  else if (VIEW === 'player') html = viewPlayer();
+  else if (VIEW === 'board' || VIEW === 'player'){
+    if (IS_BOARD && !seated())                    html = viewBoard();   // dedicated table screen
+    else if (canBoard() && boardTab === 'board')  html = viewBoard();
+    else                                          html = tabBar() + viewPlayer();
+  }
   if (showRules) html += viewRules();
   if (html === lastHtml) return;               // nothing visibly changed — leave the DOM alone
   lastHtml = html;
@@ -1468,7 +1482,7 @@ function trackFascist(){
 }
 
 function tabBar(){
-  if (!seatedBoard()) return '';
+  if (!seated() || !canBoard()) return '';
   return `<div class="tabs">
     <button class="tab ${boardTab==='board'?'on':''}" data-act="tab" data-arg="board">Gameboard</button>
     <button class="tab ${boardTab==='me'?'on':''}" data-act="tab" data-arg="me">My cards${myTurn()?'<i class="ping"></i>':''}</button>
@@ -1495,7 +1509,7 @@ function boardPlayers(lobby){
     if (p.bot) badges += '<span class="badge bot">CPU</span>';
     else if (p.uid === uid) badges += '<span class="badge">this device</span>';
     else if (p.online === false) badges += '<span class="badge" style="opacity:.5">offline</span>';
-    if (lobby && p.bot) badges += `<button class="xbtn" data-act="removeBot" data-arg="${p.uid}">remove</button>`;
+    if (lobby && p.bot && IS_BOARD) badges += `<button class="xbtn" data-act="removeBot" data-arg="${p.uid}">remove</button>`;
     return `<div class="pb ${cls}"><span class="seat">${i+1}</span>
       <span class="nm">${esc(p.name)}</span>${badges}</div>`;
   }).join('')}</div>`;
@@ -1509,14 +1523,15 @@ function boardLog(){
 
 function viewBoard(){
   const s = S(), ph = s.phase || 'lobby';
+  const host = IS_BOARD;
   const head = `${tabBar()}<div class="bhead">${LOGO}
-    <div class="joinbox">
+    ${host ? `<div class="joinbox">
       <div style="text-align:right">
         <div class="tiny muted" style="letter-spacing:.2em;text-transform:uppercase">Join at ${esc(location.host)}</div>
         <div class="code">${esc(CODE||'')}</div>
       </div>
       <div id="qr"></div>
-    </div></div>`;
+    </div>` : ''}</div>`;
 
   if (ph === 'lobby'){
     const n = P().length;
@@ -1560,7 +1575,8 @@ function viewBoard(){
       <div class="bgrid"><div>${boardPlayers()}</div>
       <div><div class="card center">
         <p class="tiny muted">${esc(nameOf(s.presidentUid))} takes the throne first.</p>
-        <button class="btn" data-act="begin">Everyone's ready — begin</button>
+        ${host ? `<button class="btn" data-act="begin">Everyone's ready — begin</button>`
+               : `<p class="tiny muted">Waiting for the table to begin.</p>`}
       </div></div></div></div>`;
   }
 
@@ -1577,8 +1593,9 @@ function viewBoard(){
       </div>`).join('')}</div>
       <div class="bgrid" style="margin-top:18px"><div>${boardLog()}</div>
       <div><div class="card">
-        <button class="btn" data-act="again">Play again with the same players</button>
-        <button class="btn ghost" data-act="home">Finish up</button>
+        ${host ? `<button class="btn" data-act="again">Play again with the same players</button>
+        <button class="btn ghost" data-act="home">Finish up</button>`
+               : `<p class="tiny muted">The table can deal another game from the board.</p>`}
       </div></div></div></div>`;
   }
 
@@ -1607,7 +1624,7 @@ function viewBoard(){
     <div class="banner ${bannerClass}">
       <div class="t">${esc(s.message||'')}</div>
       ${sub?`<div class="s">${sub}</div>`:''}
-      ${ph==='voteReveal'?`<button class="btn sm" data-act="continue">Continue</button>`:''}
+      ${(ph==='voteReveal' && host)?`<button class="btn sm" data-act="continue">Continue</button>`:''}
     </div>
     <div class="bgrid">
       <div>
@@ -1622,10 +1639,9 @@ function viewBoard(){
         </div>
         ${lastCard}
         ${boardLog()}
-      </div>
-      <div>${boardPlayers()}
         <button class="btn ghost" data-act="rules" style="margin-top:14px">How to play</button>
       </div>
+      <div>${boardPlayers()}</div>
     </div></div>`;
 }
 
