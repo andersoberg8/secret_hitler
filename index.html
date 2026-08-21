@@ -160,6 +160,25 @@ a{color:var(--gold)}
   text-transform:uppercase;letter-spacing:.05em;line-height:1.15}
 .banner .s{color:var(--cream-dim);font-size:15px;margin-top:5px}
 .banner.lib{border-left-color:var(--lib-lt)}
+.warn{background:#3d2a0e;border:1px solid var(--gold);border-left:6px solid var(--gold);
+  color:#ffe4a6;padding:12px 16px;border-radius:10px;margin-bottom:14px;
+  font-family:'Oswald',sans-serif;letter-spacing:.04em;text-transform:uppercase;
+  font-size:clamp(13px,1.5vw,17px);line-height:1.35}
+.warn small{display:block;font-family:'Zilla Slab',serif;text-transform:none;
+  letter-spacing:0;font-size:13px;opacity:.8;margin-top:4px}
+.tally{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tally > div{border-radius:12px;padding:12px 14px;border:2px solid}
+.tally .ty{border-color:var(--lib);background:rgba(61,127,166,.16)}
+.tally .tn{border-color:var(--fas);background:rgba(193,74,43,.16)}
+.tally .h{font-family:'Oswald',sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  font-size:12px;margin-bottom:8px;opacity:.95}
+.tally .who{font-size:15px;padding:3px 0;line-height:1.3}
+.tally .none{opacity:.45;font-size:14px}
+.tally.sm > div{padding:9px 11px}
+.tally.sm .who{font-size:13px;padding:2px 0}
+.lastvote{margin-top:14px}
+.lastvote .lab{font-family:'Oswald',sans-serif;letter-spacing:.14em;font-size:12px;
+  text-transform:uppercase;color:var(--cream-dim)}
 .banner.fas{border-left-color:var(--fas-lt)}
 
 .track{margin-bottom:14px}
@@ -428,6 +447,11 @@ function onStateChanged(){
   if (IS_BOARD){ hostTick(); botTick(); }
 }
 
+/* Once three Islamist decrees are down, confirming the Ayatollah as Prime
+   Minister wins outright. This is a fact about the BOARD, never about the
+   nominee — testing who the nominee actually is would announce them. */
+const dangerZone = () => (S().fascist || 0) >= 3;
+
 const seatedBoard = () => IS_BOARD && !!byUid(uid);
 const seated      = () => !!byUid(uid);
 /* every seated player gets the gameboard once the cards are dealt; the board
@@ -593,7 +617,7 @@ async function hostStart(){
     deckCount:deck.length, discardCount:0,
     nextPresidentOverride:null, resumeAfterSpecial:null,
     investigated:{}, power:null, powerTarget:null,
-    lastEnacted:null, winner:null, winReason:null, reveal:null, govHistory:[],
+    lastEnacted:null, winner:null, winReason:null, reveal:null, govHistory:[], lastVote:null,
     voteResults:null, votePassed:null,
     message:'Everyone: open your phone and read your secret loyalty card.',
     startedAt: Date.now()
@@ -634,12 +658,20 @@ async function tallyVotes(){
     const ja = living.filter(p => G.votes[p.uid] === true).length;
     const passed = ja * 2 > living.length;
     const results = {}; living.forEach(p => results[p.uid] = G.votes[p.uid] === true);
+    const yes = living.filter(p => results[p.uid]).map(p => p.name);
+    const no  = living.filter(p => !results[p.uid]).map(p => p.name);
+    // kept on the state so the breakdown stays on the board for the whole round
+    const lastVote = {results, passed, ja, total: living.length,
+                      pres: s.presidentUid, chan: s.nomineeUid};
     await hostWrite({'public/state': {...s, phase:'voteReveal', seq:s.seq+1,
       voteResults: results, votePassed: passed, jaCount: ja, totalVoters: living.length,
+      lastVote,
       message: passed
         ? `CONFIRMED — ${ja} Baleh to ${living.length-ja} Nakheir.`
         : `REJECTED — ${ja} Baleh to ${living.length-ja} Nakheir.`}});
-    await hostLog(`Vote on **${nameOf(s.presidentUid)}** / **${nameOf(s.nomineeUid)}**: ${passed?'PASSED':'FAILED'} (${ja}–${living.length-ja}).`);
+    await hostLog(`Vote on **${nameOf(s.presidentUid)}** / **${nameOf(s.nomineeUid)}**: `
+      + `${passed?'CONFIRMED':'REJECTED'} (${ja}–${living.length-ja}). `
+      + `Baleh: ${yes.join(', ') || 'nobody'}. Nakheir: ${no.join(', ') || 'nobody'}.`);
   } finally { hostBusy = false; }
 }
 
@@ -883,7 +915,7 @@ function hostTick(){
     const seq = s.seq;
     pendingTimer = setTimeout(() => {
       if (S().phase === 'voteReveal' && S().seq === seq) afterVoteReveal();
-    }, 9000);
+    }, 11000);
   }
 }
 /* ===================================================================
@@ -1515,6 +1547,37 @@ function boardPlayers(lobby){
   }).join('')}</div>`;
 }
 
+/* Shown to everyone whenever three Islamist decrees are on the board. It is a
+   statement about the board, not about the nominee — it must never depend on
+   who the nominee actually is. */
+function warnBlock(){
+  if (!dangerZone()) return '';
+  return `<div class="warn">⚠ Warning: confirming the Ayatollah now wins the game for the Islamists.
+    <small>Three Islamist decrees are on the board. Anyone you confirm as Prime Minister could be the Ayatollah.</small></div>`;
+}
+
+function voteTally(v, small){
+  if (!v || !v.results) return '';
+  const rows = P().filter(p => p.uid in v.results);
+  const yes = rows.filter(p => v.results[p.uid] === true);
+  const no  = rows.filter(p => v.results[p.uid] !== true);
+  const col = (cls, label, list) => `<div class="${cls}">
+    <div class="h">${label} · ${list.length}</div>
+    ${list.length ? list.map(p => `<div class="who">${esc(p.name)}</div>`).join('')
+                  : '<div class="none">nobody</div>'}</div>`;
+  return `<div class="tally ${small?'sm':''}">
+    ${col('ty','Baleh', yes)}${col('tn','Nakheir', no)}</div>`;
+}
+
+function lastVotePanel(){
+  const v = S().lastVote;
+  if (!v) return '';
+  return `<div class="lastvote">
+    <div class="lab">Last vote — ${esc(nameOf(v.pres))} / ${esc(nameOf(v.chan))} ·
+      ${v.passed ? 'confirmed' : 'rejected'} ${v.ja}–${v.total - v.ja}</div>
+    ${voteTally(v, true)}</div>`;
+}
+
 function boardLog(){
   const items = G.log.slice(-40).reverse();
   if (!items.length) return '';
@@ -1621,11 +1684,13 @@ function viewBoard(){
     ? `<div class="pcard ${s.lastEnacted}" style="max-width:120px;margin-top:10px">${s.lastEnacted==='L'?'Liberal':'Islamist'}<span class="sub">just issued</span></div>` : '';
 
   return `<div class="board">${head}
+    ${(ph==='nominate'||ph==='vote') ? warnBlock() : ''}
     <div class="banner ${bannerClass}">
       <div class="t">${esc(s.message||'')}</div>
       ${sub?`<div class="s">${sub}</div>`:''}
       ${(ph==='voteReveal' && host)?`<button class="btn sm" data-act="continue">Continue</button>`:''}
     </div>
+    ${ph==='voteReveal' ? voteTally(s.lastVote) : ''}
     <div class="bgrid">
       <div>
         ${trackLiberal()}
@@ -1638,6 +1703,7 @@ function viewBoard(){
           <span>${alive().length} alive</span>
         </div>
         ${lastCard}
+        ${ph!=='voteReveal' ? lastVotePanel() : ''}
         ${boardLog()}
         <button class="btn ghost" data-act="rules" style="margin-top:14px">How to play</button>
       </div>
@@ -1744,7 +1810,7 @@ function viewPlayer(){
 
     case 'nominate':
       body = isPresident() && !dead
-        ? `<div class="card"><h3>Name a Prime Minister</h3>
+        ? `${warnBlock()}<div class="card"><h3>Name a Prime Minister</h3>
             <p class="tiny muted">Term-limited players are not listed.</p>
             ${eligibleChancellors().map(p => prow(p,'nominate',p.uid,`Name ${p.name} as Prime Minister?`)).join('')}</div>`
         : waiting(`${esc(nameOf(s.presidentUid))} is choosing a Prime Minister`, 'Lobby them. Loudly.');
@@ -1754,8 +1820,8 @@ function viewPlayer(){
       if (dead){ body = waiting('The dead do not vote', 'Sit back and enjoy the chaos.'); break; }
       const voted = uid in (G.votes||{});
       body = voted
-        ? waiting('Vote cast', `Waiting for ${alive().length - Object.keys(G.votes||{}).length} more.`)
-        : `<div class="card center">
+        ? warnBlock() + waiting('Vote cast', `Waiting for ${alive().length - Object.keys(G.votes||{}).length} more.`)
+        : `${warnBlock()}<div class="card center">
             <h3>${esc(nameOf(s.presidentUid))} &nbsp;/&nbsp; ${esc(nameOf(s.nomineeUid))}</h3>
             <p class="tiny muted">Shah and Prime Minister. Confirm this government?</p>
             <div class="votes"><button class="vja" data-act="vote" data-arg="ja">Baleh!</button>
@@ -1765,11 +1831,11 @@ function viewPlayer(){
 
     case 'voteReveal': {
       const ok = s.votePassed;
-      body = `<div class="card center">
-        <h3 style="color:${ok?'var(--lib-lt)':'var(--fas-lt)'}">${ok?'Government confirmed':'Government rejected'}</h3>
-        <p class="tiny muted">${s.jaCount} Baleh · ${s.totalVoters - s.jaCount} Nakheir</p>
-        <div style="margin-top:10px">${alive().map(p =>
-          `<span class="pill ${s.voteResults && s.voteResults[p.uid] ? 'on':''}">${esc(p.name)} ${s.voteResults && s.voteResults[p.uid]?'Baleh':'Nakheir'}</span> `).join('')}</div>
+      body = `<div class="card">
+        <h3 class="center" style="color:${ok?'var(--lib-lt)':'var(--fas-lt)'}">${ok?'Government confirmed':'Government rejected'}</h3>
+        <p class="tiny muted center">${esc(nameOf(s.presidentUid))} / ${esc(nameOf(s.nomineeUid))}
+          · ${s.jaCount} Baleh to ${s.totalVoters - s.jaCount} Nakheir</p>
+        ${voteTally(s.lastVote)}
       </div>`;
       break;
     }
